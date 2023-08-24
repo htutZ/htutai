@@ -11,19 +11,28 @@ def context_aware_translation(text):
                     text = text.replace(word, context['translation'])
     return text
 
+def convert_to_myanmar(text):
+    """Convert potential Myanglish words in the text to Myanmar."""
+    for key, value in my_transliteration.items():
+        text = text.replace(key, value)
+    return text
+
 def detect_language(text):
-    # Check for Myanmar characters in the text
+    # Create combined list of Myanglish words by joining symbols with transliterations
+    combined_myanglish_words = [sym + trans for sym in my_symbols for trans in my_transliteration]
+
+    # Check for Myanmar characters in the original text
     myanmar_chars = "က-႟"
     if re.search("[{}]+".format(myanmar_chars), text):
         return "Myanmar (Burmese)"
 
-    # Use context-aware translation
-    text = context_aware_translation(text)
-
-    # Check for Myanglish (combination of Latin and Myanmar)
-    for key in my_transliteration:
-        if key in text and my_transliteration[key] in text:
+    # Check for potential Myanglish words
+    for word in combined_myanglish_words:
+        if word in text:
             return "Myanglish"
 
-    # If neither condition is met, it's likely Latin
-    return "Latin"
+    # If neither condition is met, it's likely English
+    return "English"
+
+
+

@@ -1,11 +1,14 @@
 from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.label import Label
 from kivy.uix.button import Button
+from kivy.animation import Animation
 from language_detector import detect_language
 from functions.load_responses import load_responses_from_database
 from functions.transliterate import transliterate
+from functions.myanglish_to_burmese import myanglish_to_burmese
+from functions.improved_transliterate import improved_transliterate
 import torch
 import torch.nn as nn
 
@@ -14,7 +17,7 @@ queries, responses, response_category_mapping = load_responses_from_database()
 
 # Create a vocabulary from the queries
 vocab = set(' '.join(queries))
-vocab_size = len(vocab)
+vocab_size = 21
 print(f"Vocabulary Size: {vocab_size}")
 index_to_char = dict(enumerate(vocab))
 char_to_index = {char: idx for idx, char in index_to_char.items()}
@@ -70,26 +73,48 @@ class VirtualAssistant:
 
 class AssistantApp(App):
     def build(self):
-        layout = BoxLayout(orientation='vertical')
-        self.user_input = TextInput(hint_text='Type your query here')
-        self.response_label = Label(text='', font_name="MyanmarFont.ttf")
-        query_button = Button(text='Ask Assistant')
+        layout = FloatLayout(size=(300, 300))
+        
+        self.user_input = TextInput(size_hint=(.8, .1), pos_hint={'x':.1, 'y':.8}, hint_text='Type your query here')
+        
+        query_button = Button(size_hint=(.6, .1), pos_hint={'x':.2, 'y':.6}, text='Ask Assistant', background_color=(0, 0.5, 0.5, 1))
         query_button.bind(on_press=self.handle_query)
+        
+        self.response_label = Label(size_hint=(.8, .3), pos_hint={'x':.1, 'y':.3}, text='', font_name="MyanmarFont.ttf")
+        
         layout.add_widget(self.user_input)
         layout.add_widget(query_button)
         layout.add_widget(self.response_label)
+        
         return layout
 
     def handle_query(self, instance):
-        user_query = transliterate(self.user_input.text)
-        user_query = self.user_input.text
-        language_used = detect_language(user_query)
-        print(f"Detected Language: {language_used}")  # This will print the detected language to console
+
+        anim = Animation(pos_hint={'x': .1, 'y': .59}, t='out_bounce')
+        anim += Animation(pos_hint={'x': .2, 'y': .6}, t='out_bounce')
+        anim.start(instance)
+
+        original_user_query = self.user_input.text  # Store the original user's input
+        language_used = detect_language(original_user_query)
+    
+        print(f"User's Original Input: {original_user_query}")  # Print the original user's input to console
+        print(f"Detected Language: {language_used}")  # Print the detected language to console
+  
+        user_query = original_user_query  # Initialize with the original input
+
+        if language_used == "Myanglish":
+             user_query = improved_transliterate(original_user_query)
+             burmese_translation = myanglish_to_burmese(user_query)
+             print(f"Converted to Burmese: {burmese_translation}")  # Print the converted Burmese text
+             user_query = burmese_translation
 
         assistant = VirtualAssistant(model)  # Pass the trained model
         response = assistant.respond_to_query(user_query)
         self.response_label.text = response
 
+        self.response_label.opacity = 0
+        anim = Animation(opacity=1, duration=2)
+        anim.start(self.response_label)
 
 if __name__ == "__main__":
     AssistantApp().run()
