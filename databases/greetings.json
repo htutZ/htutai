@@ -1,0 +1,4 @@
+{
+    "queries": ["hello", "hi", "hey", "good morning", "good evening"],
+    "responses": ["Hello!", "Hi there!", "Hey!", "Good morning!", "Good evening!"]
+}

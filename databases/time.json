@@ -1,0 +1,4 @@
+{
+    "queries": ["remind me", "set reminder", "don't let me forget"],
+    "responses": ["Setting a reminder for you.", "Reminder set!", "I won't let you forget."]
+}
