@@ -12,11 +12,10 @@ vocab_size = len(vocab)
 index_to_char = dict(enumerate(vocab))
 char_to_index = {char: idx for idx, char in index_to_char.items()}
 
-# Convert queries to one-hot encoded tensors
 def string_to_onehot(string, max_length=50):
     tensor = torch.zeros(max_length, vocab_size)
     for li, letter in enumerate(string):
-        if letter in char_to_index:  # Check if the letter is in our vocabulary
+        if letter in char_to_index:  
             tensor[li][char_to_index[letter]] = 1
     return tensor
 

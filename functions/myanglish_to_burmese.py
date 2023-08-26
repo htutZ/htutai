@@ -6,7 +6,6 @@ from databases.myanglish_context_db import myanglish_context
 def myanglish_to_burmese(myanglish_text):
     words = myanglish_text.split()
 
-    # Check for multi-word context translations
     for i, word in enumerate(words):
         for key, translations in myanglish_context.items():
             if word == key:
@@ -15,19 +14,17 @@ def myanglish_to_burmese(myanglish_text):
                     if context_match:
                         words[i] = translation['translation']
 
-    # Translate word by word
     burmese_text = ''
     for word in words:
         if word in priority_transliterations:
             burmese_text += priority_transliterations[word]
         else:
-            # Take the first character and look in symbols
+
             first_char = word[0]
             if first_char in my_symbols:
                 burmese_text += my_symbols[first_char]
-                word = word[1:]  # remove the first character
+                word = word[1:]  
 
-            # Now, transliterate the remaining characters
             for char in word:
                 if char in my_transliteration:
                     burmese_text += my_transliteration[char]

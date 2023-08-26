@@ -18,20 +18,17 @@ def convert_to_myanmar(text):
     return text
 
 def detect_language(text):
-    # Create combined list of Myanglish words by joining symbols with transliterations
+
     combined_myanglish_words = [sym + trans for sym in my_symbols for trans in my_transliteration]
 
-    # Check for Myanmar characters in the original text
     myanmar_chars = "က-႟"
     if re.search("[{}]+".format(myanmar_chars), text):
         return "Myanmar (Burmese)"
 
-    # Check for potential Myanglish words
     for word in combined_myanglish_words:
         if word in text:
             return "Myanglish"
 
-    # If neither condition is met, it's likely English
     return "English"
 
 

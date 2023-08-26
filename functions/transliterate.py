@@ -8,9 +8,8 @@ def transliterate(text):
     
     for idx, word in enumerate(words):
         if word in myanglish_context:
-            best_translation = myanglish_context[word][0]["translation"]  # Default to the first translation
+            best_translation = myanglish_context[word][0]["translation"]
             for option in myanglish_context[word]:
-                # Check neighboring words for context
                 if any(context_word in words[max(0, idx-1):min(len(words), idx+2)] for context_word in option["context"]):
                     best_translation = option["translation"]
                     break

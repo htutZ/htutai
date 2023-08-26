@@ -12,6 +12,12 @@ myanglish_context = {
         {"translation": "လည်း", "context": ["ngr" ,"ngar" ,"nin" ,"thu"]},  # Add more personal pronouns or relevant words if necessary
         {"translation": "လဲ", "context": ["tar"]},  # Add more question words if necessary
     ],
+    "sa": [
+        {"translation": "စ", "context": ["nk","buu","bu",]},
+    ],
+    "sa": [
+        {"translation": "ဆ", "context": ["yr","yar","ya"]},
+    ],
     "sar": [
         {"translation": "စာ", "context": ["lote"]},
     ],

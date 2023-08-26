@@ -12,17 +12,14 @@ from functions.improved_transliterate import improved_transliterate
 import torch
 import torch.nn as nn
 
-# Dummy data
 queries, responses, response_category_mapping = load_responses_from_database()
 
-# Create a vocabulary from the queries
 vocab = set(' '.join(queries))
 vocab_size = 21
 print(f"Vocabulary Size: {vocab_size}")
 index_to_char = dict(enumerate(vocab))
 char_to_index = {char: idx for idx, char in index_to_char.items()}
 
-# Convert queries to one-hot encoded tensors
 def string_to_onehot(string, max_length=50):
     tensor = torch.zeros(max_length, vocab_size)
     for li, letter in enumerate(string):
@@ -30,12 +27,11 @@ def string_to_onehot(string, max_length=50):
             tensor[li][char_to_index[letter]] = 1
     return tensor
 
-input_size = 50 * vocab_size  # This ensures a consistent input size based on vocab
+input_size = 50 * vocab_size  
 print(f"Input Size: {input_size}")
 hidden_size = 128
 output_size = len(responses)
 
-# Define the SimpleNN class again
 class SimpleNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(SimpleNN, self).__init__()
@@ -48,7 +44,6 @@ class SimpleNN(nn.Module):
         x = self.fc2(x)
         return self.softmax(x)
 
-# Load the trained model
 model = SimpleNN(input_size, hidden_size, output_size)
 model.load_state_dict(torch.load("model.pth"))
 model.eval()
@@ -80,7 +75,7 @@ class AssistantApp(App):
         query_button = Button(size_hint=(.6, .1), pos_hint={'x':.2, 'y':.6}, text='Ask Assistant', background_color=(0, 0.5, 0.5, 1))
         query_button.bind(on_press=self.handle_query)
         
-        self.response_label = Label(size_hint=(.8, .3), pos_hint={'x':.1, 'y':.3}, text='', font_name="MyanmarFont.ttf")
+        self.response_label = Label(size_hint=(.8, .3), pos_hint={'x':.1, 'y':.3}, text='', font_name="fonts/Pyidaungsu.ttf", font_size=24)
         
         layout.add_widget(self.user_input)
         layout.add_widget(query_button)
@@ -94,21 +89,21 @@ class AssistantApp(App):
         anim += Animation(pos_hint={'x': .2, 'y': .6}, t='out_bounce')
         anim.start(instance)
 
-        original_user_query = self.user_input.text  # Store the original user's input
+        original_user_query = self.user_input.text  
         language_used = detect_language(original_user_query)
     
-        print(f"User's Original Input: {original_user_query}")  # Print the original user's input to console
-        print(f"Detected Language: {language_used}")  # Print the detected language to console
+        print(f"User's Original Input: {original_user_query}") 
+        print(f"Detected Language: {language_used}") 
   
-        user_query = original_user_query  # Initialize with the original input
+        user_query = original_user_query
 
         if language_used == "Myanglish":
              user_query = improved_transliterate(original_user_query)
              burmese_translation = myanglish_to_burmese(user_query)
-             print(f"Converted to Burmese: {burmese_translation}")  # Print the converted Burmese text
+             print(f"Converted to Burmese: {burmese_translation}") 
              user_query = burmese_translation
 
-        assistant = VirtualAssistant(model)  # Pass the trained model
+        assistant = VirtualAssistant(model)
         response = assistant.respond_to_query(user_query)
         self.response_label.text = response
 
