@@ -1,14 +1,14 @@
-from kivy.app import App
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.textinput import TextInput
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.animation import Animation
+from PySide2.QtWidgets import (QApplication, QMainWindow, QTabWidget, QTabBar, 
+                               QCalendarWidget, QVBoxLayout, QWidget)
+from PySide2.QtGui import QFontDatabase, QFont, QIcon, QColor, QPainter, QBrush
+from PySide2.QtCore import Qt, QTimer, Slot
 from language_detector import detect_language
 from functions.load_responses import load_responses_from_database
 from functions.transliterate import transliterate
 from functions.myanglish_to_burmese import myanglish_to_burmese
 from functions.improved_transliterate import improved_transliterate
+from ui import chat_tab, clock_tab, calendar_tab, menu_tab, music_tab
+import sys
 import torch
 import torch.nn as nn
 
@@ -66,50 +66,46 @@ class VirtualAssistant:
             else:
                 return "I'm not sure what you mean."
 
-class AssistantApp(App):
-    def build(self):
-        layout = FloatLayout(size=(300, 300))
-        
-        self.user_input = TextInput(size_hint=(.8, .1), pos_hint={'x':.1, 'y':.8}, hint_text='Type your query here')
-        
-        query_button = Button(size_hint=(.6, .1), pos_hint={'x':.2, 'y':.6}, text='Ask Assistant', background_color=(0, 0.5, 0.5, 1))
-        query_button.bind(on_press=self.handle_query)
-        
-        self.response_label = Label(size_hint=(.8, .3), pos_hint={'x':.1, 'y':.3}, text='', font_name="fonts/Pyidaungsu.ttf", font_size=24)
-        
-        layout.add_widget(self.user_input)
-        layout.add_widget(query_button)
-        layout.add_widget(self.response_label)
-        
-        return layout
 
-    def handle_query(self, instance):
+class AssistantApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
 
-        anim = Animation(pos_hint={'x': .1, 'y': .59}, t='out_bounce')
-        anim += Animation(pos_hint={'x': .2, 'y': .6}, t='out_bounce')
-        anim.start(instance)
+        self.setWindowTitle('Assistant')
+        self.setGeometry(100, 100, 500, 400)
+        self.setMinimumSize(400, 300)
+        self.setWindowIcon(QIcon('icon.png'))
 
-        original_user_query = self.user_input.text  
+        self.tab_widget = QTabWidget(self)
+
+        self.tab_widget.addTab(chat_tab.create_chat_tab(), "Chat")
+        self.tab_widget.addTab(clock_tab.create_clock_tab(), "Clock")
+        self.tab_widget.addTab(calendar_tab.create_calendar_tab(), "Calendar")
+        self.tab_widget.addTab(music_tab.create_music_tab(), "Music")
+        self.tab_widget.addTab(menu_tab.create_menu_tab(), "Menu")
+
+
+        self.setCentralWidget(self.tab_widget)
+
+        QApplication.setStyle('Fusion')
+        
+    @Slot()
+    def handle_query(self):
+        original_user_query = self.user_input.text()
         language_used = detect_language(original_user_query)
-    
-        print(f"User's Original Input: {original_user_query}") 
-        print(f"Detected Language: {language_used}") 
-  
-        user_query = original_user_query
 
+        user_query = original_user_query
         if language_used == "Myanglish":
              user_query = improved_transliterate(original_user_query)
              burmese_translation = myanglish_to_burmese(user_query)
-             print(f"Converted to Burmese: {burmese_translation}") 
              user_query = burmese_translation
 
         assistant = VirtualAssistant(model)
         response = assistant.respond_to_query(user_query)
-        self.response_label.text = response
-
-        self.response_label.opacity = 0
-        anim = Animation(opacity=1, duration=2)
-        anim.start(self.response_label)
+        self.response_label.setText(response)
 
 if __name__ == "__main__":
-    AssistantApp().run()
+    app = QApplication([])
+    window = AssistantApp()
+    window.show()
+    app.exec_()
