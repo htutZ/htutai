@@ -1,7 +1,7 @@
 from PySide2.QtWidgets import (QListWidget, QVBoxLayout, QPushButton, QWidget, QTextEdit, QHBoxLayout, QComboBox,
-                               QLineEdit, QLabel, QListWidgetItem, QStyle, QApplication)
+                               QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication)
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent
-from PySide2.QtCore import QUrl, QFile, QTextStream, Qt
+from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer
 from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor
 import os
 import spotipy
@@ -155,8 +155,16 @@ def create_music_tab():
             thumbnail_url = f"http://i4.ytimg.com/vi/{video_id}/default.jpg"
             thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
             item.setIcon(QIcon(thumbnail))
-        
+
+    instance = vlc.Instance()
+    player = instance.media_player_new() 
     is_playing = False
+
+    progress_bar = QSlider(Qt.Horizontal)
+    layout.addWidget(progress_bar)
+
+    progress_timer = QTimer()
+    progress_timer.timeout.connect(lambda: progress_bar.setValue(player.get_position() * 1000))
 
     def play_selected_song():
         nonlocal is_playing
@@ -186,21 +194,14 @@ def create_music_tab():
                 thumbnail_label.setPixmap(get_thumbnail_as_pixmap(info_dict['thumbnail']))
 
                 pythoncom.CoInitialize()
-                instance = vlc.Instance()
-                player = instance.media_player_new()
 
                 media = instance.media_new(audio_url)
                 player.set_media(media)
                 player.play()
 
-                if not is_playing:
-                   player.play()
-                   play_pause_button.setText("Pause")
-                   is_playing = True
-                else:
-                   player.pause()
-                   play_pause_button.setText("Play")
-                   is_playing = False
+                play_pause_button.setText("▶️")
+                is_playing = True
+                progress_timer.start(1000)  # Update every second
                 
         except Exception as e:
             print(f"Error playing song: {e}")
@@ -209,10 +210,16 @@ def create_music_tab():
         nonlocal is_playing
         if is_playing:
             player.pause()
-            play_pause_button.setText("Play")
-            is_playing = False
+            play_pause_button.setText("▶️")
+            progress_timer.stop()
         else:
-            play_selected_song()
+            if player.get_media():
+                player.play()
+                play_pause_button.setText("⏸︎")
+                progress_timer.start(1000)
+            else:
+                play_selected_song()
+        is_playing = not is_playing    
 
     def play_next_song():
         current_row = song_list_widget.currentRow()
@@ -232,6 +239,9 @@ def create_music_tab():
     next_song_button.clicked.connect(play_next_song)
     prev_song_button.clicked.connect(play_prev_song)
     search_button.clicked.connect(search_song)
+    play_pause_button.setText("▶️")  # Initialize with play icon
+    next_song_button.setText("⏭️")
+    prev_song_button.setText("⏮️")
 
     widget.setLayout(layout)
     return widget
