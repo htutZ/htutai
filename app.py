@@ -1,5 +1,5 @@
 from PySide2.QtWidgets import (QApplication, QMainWindow, QTabWidget, QTabBar, 
-                               QCalendarWidget, QVBoxLayout, QWidget)
+                               QCalendarWidget, QVBoxLayout, QWidget, QSizePolicy)
 from PySide2.QtGui import QFontDatabase, QFont, QIcon, QColor, QPainter, QBrush
 from PySide2.QtCore import Qt, QTimer, Slot
 from language_detector import detect_language
@@ -71,23 +71,99 @@ class AssistantApp(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Load Icons
+        chat_icon = QIcon('./icons/chat.png')
+        clock_icon = QIcon('./icons/clock.png')
+        calendar_icon = QIcon('./icons/calendar.png')
+        music_icon = QIcon('./icons/music.png')
+        menu_icon = QIcon('./icons/menu.png')
+
+
+        # Load the screen dimensions
+        screen = app.primaryScreen()
+        screen_size = screen.size()
+
+        # App window properties
         self.setWindowTitle('Assistant')
-        self.setGeometry(100, 100, 500, 400)
-        self.setMinimumSize(400, 300)
+        self.resize(screen_size)
         self.setWindowIcon(QIcon('icon.png'))
 
+        # Styling the app
+        self.init_ui()
+
+        # Set up Tabs
         self.tab_widget = QTabWidget(self)
-
-        self.tab_widget.addTab(chat_tab.create_chat_tab(), "Chat")
-        self.tab_widget.addTab(clock_tab.create_clock_tab(), "Clock")
-        self.tab_widget.addTab(calendar_tab.create_calendar_tab(), "Calendar")
-        self.tab_widget.addTab(music_tab.create_music_tab(), "Music")
-        self.tab_widget.addTab(menu_tab.create_menu_tab(), "Menu")
-
+        self.tab_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Tabs
+        self.tab_widget.addTab(chat_tab.create_chat_tab(), QIcon(chat_icon), "")
+        self.tab_widget.addTab(clock_tab.create_clock_tab(), QIcon(clock_icon), "")
+        self.tab_widget.addTab(calendar_tab.create_calendar_tab(), QIcon(calendar_icon), "")
+        self.tab_widget.addTab(music_tab.create_music_tab(), QIcon(music_icon), "")
+        self.tab_widget.addTab(menu_tab.create_menu_tab(), QIcon(menu_icon), "")
+        
+        # Connect signal for tab change to update text
+        self.tab_widget.currentChanged.connect(self.update_tab_text)
 
         self.setCentralWidget(self.tab_widget)
 
-        QApplication.setStyle('Fusion')
+    def update_tab_text(self, index):
+        # Reset all tabs to have no text
+        for i in range(self.tab_widget.count()):
+            self.tab_widget.setTabText(i, "")
+
+        # Set text for the selected tab
+        if index == 0:
+            self.tab_widget.setTabText(index, "  Chat")
+        elif index == 1:
+            self.tab_widget.setTabText(index, "  Clock")
+        elif index == 2:
+            self.tab_widget.setTabText(index, "  Calendar")
+        elif index == 3:
+            self.tab_widget.setTabText(index, "  Music")  
+
+        
+    def init_ui(self):
+
+        num_tabs = 5  # Adjust this if you change the number of tabs
+        tab_width = 100 / num_tabs  # Calculate the width for each tab
+        # Style
+        self.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: #2E2E2E;
+            }}
+            QTabWidget::pane {{
+                border: 1px solid #444;
+            }}
+            QTabBar::tab {{
+                background: #555;
+                color: white;
+                padding: 10px;
+                width: {tab_width}%;
+            }}
+            QTabBar::tab:selected {{
+                background: #888;
+            }}
+            QPushButton {{
+                background-color: #333;
+                color: white;
+                padding: 5px 15px;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: #555;
+            }}
+            QLabel, QLineEdit {{
+                color: white;
+            }}
+        """)
+
+        # Font
+        font_database = QFontDatabase()
+        font_database.addApplicationFont("./icons/Pyidaungsu.ttf")  # Replace with the path to your font
+        app_font = QFont("Pyidaungsu", 10)  # Replace with the name of your font
+        self.setFont(app_font)
+        
         
     @Slot()
     def handle_query(self):

@@ -9,7 +9,8 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from ytmusicapi import YTMusic
 import pytube
 from pytube import Search, YouTube
-
+from colorthief import ColorThief
+from io import BytesIO
 import vlc
 import pythoncom
 import yt_dlp
@@ -24,7 +25,13 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id="92b308edd4
                                                            client_secret="9ef2001ccf21447f937679801d935b3d"))
 
 
-
+def dominant_color_from_url(url):
+    """Get the dominant color from an image URL."""
+    response = requests.get(url)
+    color_thief = ColorThief(BytesIO(response.content))
+    dominant_color = color_thief.get_color(quality=1)
+    return QColor(*dominant_color)
+    
 def search_youtube(query, max_results=10):
     search_results = Search(query).results[:max_results]
     return [(video.title, video.video_id) for video in search_results]
@@ -46,31 +53,34 @@ def get_stream_url(video_id):
     stream = yt.streams.filter(only_audio=True).first()
     return stream.url
 
+def format_time(ms):
+    """Convert milliseconds into MM:SS format."""
+    s = ms // 1000
+    m, s = divmod(s, 60)
+    return f"{m:02d}:{s:02d}"
+
 def create_music_tab():
 
-        # Dark theme settings
     dark_palette = QPalette()
-    dark_palette.setColor(QPalette.Window, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.WindowText, Qt.white)
-    dark_palette.setColor(QPalette.Base, QColor(25, 25, 25))
-    dark_palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ToolTipBase, Qt.white)
-    dark_palette.setColor(QPalette.ToolTipText, Qt.white)
-    dark_palette.setColor(QPalette.Text, Qt.white)
-    dark_palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ButtonText, Qt.white)
+    dark_palette.setColor(QPalette.Window, QColor(0, 0, 0))  # Black
+    dark_palette.setColor(QPalette.WindowText, QColor(0, 255, 255))  # Cyan
+    dark_palette.setColor(QPalette.Base, QColor(0, 0, 0))  # Black
+    dark_palette.setColor(QPalette.AlternateBase, QColor(0, 0, 0))  # Black
+    dark_palette.setColor(QPalette.ToolTipBase, QColor(0, 255, 255))  # Cyan
+    dark_palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))  # Black
+    dark_palette.setColor(QPalette.Text, QColor(0, 255, 255))  # Cyan
+    dark_palette.setColor(QPalette.Button, QColor(0, 0, 0))  # Black
+    dark_palette.setColor(QPalette.ButtonText, QColor(0, 255, 255))  # Cyan
     dark_palette.setColor(QPalette.BrightText, Qt.red)
-    dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
-    dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    dark_palette.setColor(QPalette.HighlightedText, Qt.black)
+    dark_palette.setColor(QPalette.Link, QColor(0, 255, 255))  # Cyan
+    dark_palette.setColor(QPalette.Highlight, QColor(0, 255, 255))  # Cyan
+    dark_palette.setColor(QPalette.HighlightedText, QColor(0, 0, 0)) 
     QApplication.setPalette(dark_palette)
     QApplication.setStyle("Fusion")
 
     widget = QWidget()
     layout = QVBoxLayout()
-    controls_layout = QHBoxLayout()
 
-    player = QMediaPlayer()
     loop_modes = ["No Loop", "Repeat One", "Repeat All"]
 
     # Search bar
@@ -86,27 +96,25 @@ def create_music_tab():
     song_list_widget = QListWidget()
     layout.addWidget(song_list_widget)
 
-    # Lyrics display
-    lyrics_display = QTextEdit()
-    lyrics_display.setReadOnly(True)
-    layout.addWidget(lyrics_display)
+    # Playback info layout
+    playback_info_layout = QHBoxLayout()
+    thumbnail_label_playback = QLabel()
+    title_label_playback = QLabel()
+    play_pause_button_playback = QPushButton("▶️")
 
-    # Play song button
-    play_pause_button = QPushButton("Play", widget)
-    controls_layout.addWidget(play_pause_button)
-
-    # Next and Previous buttons
-    next_song_button = QPushButton("Next", widget)
-    controls_layout.addWidget(next_song_button)
-
-    prev_song_button = QPushButton("Previous", widget)
-    controls_layout.addWidget(prev_song_button)
-
-    # Loop control
+    # Main controls
+    controls_layout = QHBoxLayout()
+    play_pause_button = QPushButton("▶️")
+    next_song_button = QPushButton("⏭️")
+    prev_song_button = QPushButton("⏮️")
     loop_control = QComboBox()
-    loop_control.addItems(loop_modes)
+    loop_control.addItems(["No Loop", "Repeat One", "Repeat All"])
+    
+    controls_layout.addWidget(play_pause_button)
+    controls_layout.addWidget(prev_song_button)
+    controls_layout.addWidget(next_song_button)
     controls_layout.addWidget(loop_control)
-
+    
     layout.addLayout(controls_layout)
 
     song_database = {}
@@ -127,9 +135,6 @@ def create_music_tab():
 
     artist_label = QLabel()
     layout.addWidget(artist_label)
-
-    thumbnail_label = QLabel()
-    layout.addWidget(thumbnail_label)
 
     duration_label = QLabel("Duration:")
     layout.addWidget(duration_label)
@@ -158,13 +163,67 @@ def create_music_tab():
 
     instance = vlc.Instance()
     player = instance.media_player_new() 
+    player.audio_set_volume(60)  # Set the default volume to 60
     is_playing = False
 
     progress_bar = QSlider(Qt.Horizontal)
-    layout.addWidget(progress_bar)
+    # Current time label
+    current_time_label = QLabel("00:00")
+    layout.addWidget(current_time_label, alignment=Qt.AlignLeft)
 
+    # Total duration label
+    total_duration_label = QLabel("00:00")
+    layout.addWidget(total_duration_label, alignment=Qt.AlignRight)
+
+    # Adjusting the Music bar layout
+    music_bar_layout = QVBoxLayout()
+
+    playback_controls_layout = QHBoxLayout()
+    playback_controls_layout.addWidget(thumbnail_label_playback)
+    playback_controls_layout.addWidget(title_label_playback, 1)
+    playback_controls_layout.addWidget(play_pause_button_playback)
+
+    music_bar_layout.addLayout(playback_controls_layout)
+    music_bar_layout.addWidget(progress_bar)
+    music_bar_layout.addWidget(current_time_label, alignment=Qt.AlignLeft)
+    music_bar_layout.addWidget(progress_bar, alignment=Qt.AlignCenter)
+    music_bar_layout.addWidget(total_duration_label, alignment=Qt.AlignRight)
+
+
+    # Create a new QWidget for the music bar and set the layout
+    music_bar_widget = QWidget()
+    music_bar_widget.setLayout(music_bar_layout)
+
+    # Removing old widgets and layouts
+    layout.removeWidget(play_pause_button_playback)
+    layout.removeWidget(title_label_playback)
+
+    # Add to main layout
+    layout.addWidget(music_bar_widget)
     progress_timer = QTimer()
-    progress_timer.timeout.connect(lambda: progress_bar.setValue(player.get_position() * 1000))
+
+    # Progress bar mouse click event
+    def progress_bar_clicked(event):
+        fraction = event.x() / progress_bar.width()
+        new_value = fraction * progress_bar.maximum()
+        progress_bar.setValue(int(new_value))
+        player.set_time(int(new_value))
+
+    progress_bar.mousePressEvent = progress_bar_clicked
+
+    # Update the progress bar and current time label every second
+    def update_progress():
+        current_time = player.get_time()
+        progress_bar.setValue(current_time)
+        current_time_label.setText(format_time(current_time))
+
+    progress_timer.timeout.connect(update_progress)
+
+        # This function will be called when the user adjusts the progress bar
+    def update_player_position(value):
+        player.set_time(value)  # Convert from milliseconds to seconds
+
+    progress_bar.sliderMoved.connect(update_player_position)
 
     def play_selected_song():
         nonlocal is_playing
@@ -191,7 +250,20 @@ def create_music_tab():
 
                 title_label.setText(info_dict.get('title', 'Unknown Title'))
                 duration_label.setText(f"Duration: {info_dict.get('duration', 'N/A')} seconds")
-                thumbnail_label.setPixmap(get_thumbnail_as_pixmap(info_dict['thumbnail']))
+
+                # Set the progress bar's maximum value to the song's duration
+                song_duration = info_dict.get('duration', 0)  # in seconds
+                progress_bar.setMaximum(song_duration * 1000)  # convert to ms
+                total_duration_label.setText(format_time(song_duration * 1000))
+                progress_timer.timeout.connect(lambda: progress_bar.setValue(player.get_time()))
+                
+                # Update playback info box
+                thumbnail_url = f"http://i4.ytimg.com/vi/{video_id}/default.jpg"
+                thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
+                thumbnail_label_playback.setPixmap(thumbnail.scaled(50, 50, Qt.KeepAspectRatio))  # Small thumbnail
+                title_label_playback.setText(info_dict.get('title', 'Unknown Title'))
+                dominant_color = dominant_color_from_url(thumbnail_url)
+                music_bar_widget.setStyleSheet(f"background-color: rgb({dominant_color.red()}, {dominant_color.green()}, {dominant_color.blue()});")
 
                 pythoncom.CoInitialize()
 
@@ -199,7 +271,6 @@ def create_music_tab():
                 player.set_media(media)
                 player.play()
 
-                play_pause_button.setText("▶️")
                 is_playing = True
                 progress_timer.start(1000)  # Update every second
                 
@@ -208,18 +279,19 @@ def create_music_tab():
 
     def toggle_play_pause():
         nonlocal is_playing
-        if is_playing:
+        if player.get_state() == vlc.State.Playing:
             player.pause()
             play_pause_button.setText("▶️")
             progress_timer.stop()
+            is_playing = False
         else:
-            if player.get_media():
-                player.play()
-                play_pause_button.setText("⏸︎")
-                progress_timer.start(1000)
-            else:
+            if not player.get_media():
                 play_selected_song()
-        is_playing = not is_playing    
+            else:
+                player.play()
+                progress_timer.start(1000)
+            play_pause_button.setText("⏸︎")    
+            is_playing = True
 
     def play_next_song():
         current_row = song_list_widget.currentRow()
@@ -239,7 +311,8 @@ def create_music_tab():
     next_song_button.clicked.connect(play_next_song)
     prev_song_button.clicked.connect(play_prev_song)
     search_button.clicked.connect(search_song)
-    play_pause_button.setText("▶️")  # Initialize with play icon
+    play_pause_button_playback.clicked.connect(toggle_play_pause)
+    play_pause_button.setText("▶️")
     next_song_button.setText("⏭️")
     prev_song_button.setText("⏮️")
 
