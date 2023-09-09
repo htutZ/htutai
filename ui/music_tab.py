@@ -1,8 +1,8 @@
 from PySide2.QtWidgets import (QListWidget, QVBoxLayout, QPushButton, QWidget, QTextEdit, QHBoxLayout, QComboBox,
-                               QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication)
+                               QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication, QSizePolicy)
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent
-from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer
-from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor
+from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize
+from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -99,23 +99,9 @@ def create_music_tab():
     # Playback info layout
     playback_info_layout = QHBoxLayout()
     thumbnail_label_playback = QLabel()
-    title_label_playback = QLabel()
-    play_pause_button_playback = QPushButton("▶️")
-
-    # Main controls
-    controls_layout = QHBoxLayout()
-    play_pause_button = QPushButton("▶️")
-    next_song_button = QPushButton("⏭️")
-    prev_song_button = QPushButton("⏮️")
-    loop_control = QComboBox()
-    loop_control.addItems(["No Loop", "Repeat One", "Repeat All"])
-    
-    controls_layout.addWidget(play_pause_button)
-    controls_layout.addWidget(prev_song_button)
-    controls_layout.addWidget(next_song_button)
-    controls_layout.addWidget(loop_control)
-    
-    layout.addLayout(controls_layout)
+    title_label_playback = AnimatedLabel()
+    play_pause_button_playback = QPushButton()
+    play_pause_button_playback.setIcon(QIcon("./icons/play.png"))
 
     song_database = {}
 
@@ -129,15 +115,8 @@ def create_music_tab():
             song_database[song] = os.path.join(song_folder, song)
             song_list_widget.addItem(song)
 
-    # Adding to the UI:
-    title_label = QLabel()
-    layout.addWidget(title_label)
-
     artist_label = QLabel()
     layout.addWidget(artist_label)
-
-    duration_label = QLabel("Duration:")
-    layout.addWidget(duration_label)
 
     def get_thumbnail_as_pixmap(url):
         image = QImage()
@@ -167,36 +146,65 @@ def create_music_tab():
     is_playing = False
 
     progress_bar = CustomSlider(player, Qt.Horizontal)
-    # Current time label
-    current_time_label = QLabel("00:00")
-    layout.addWidget(current_time_label, alignment=Qt.AlignLeft)
 
-    # Total duration label
-    total_duration_label = QLabel("00:00")
-    layout.addWidget(total_duration_label, alignment=Qt.AlignRight)
 
     # Adjusting the Music bar layout
     music_bar_layout = QVBoxLayout()
 
+        # Current time label
+    current_time_label = QLabel("00:00")
+
+    # Total duration label
+    total_duration_label = QLabel("00:00")
+
+        # Main controls
+    controls_layout = QHBoxLayout()
+    play_pause_button = QPushButton("▶️")
+    next_song_button = QPushButton("⏭️")
+    prev_song_button = QPushButton("⏮️")
+    loop_control = QComboBox()
+    loop_control.addItems(["No Loop", "Repeat One", "Repeat All"])
+
+    container_widget = QWidget()
+    container_widget.setFixedWidth(450)  # Set a width based on your requirements
+# Create a layout for the container
+    container_layout = QHBoxLayout()
+    container_layout.setSpacing(10) 
+    
+    container_widget.setLayout(container_layout)
+    container_layout.setContentsMargins(0, 0, 0, 0)  # This sets the margins to zero
+
+    # Remove QLabel's internal margins
+    thumbnail_label_playback.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
+
+# Add the thumbnail and title to the container's layout
+    container_layout.addWidget(thumbnail_label_playback)
+    container_layout.addWidget(title_label_playback)
+
+    # Playback info and controls
     playback_controls_layout = QHBoxLayout()
-    playback_controls_layout.addWidget(thumbnail_label_playback)
-    playback_controls_layout.addWidget(title_label_playback, 1)
+    playback_controls_layout.addWidget(container_widget) 
+    playback_controls_layout.setContentsMargins(0, 0, 0, 0)
+    playback_controls_layout.setSpacing(0)
+    # Adding spacers to push the controls to the center a bit
+    playback_controls_layout.addStretch(1.5)  # Adds some space before controls
+    playback_controls_layout.addWidget(prev_song_button)
     playback_controls_layout.addWidget(play_pause_button_playback)
+    playback_controls_layout.addWidget(next_song_button)
+    playback_controls_layout.addWidget(loop_control)
+    playback_controls_layout.addStretch(2)
+
+    progress_layout = QHBoxLayout()
+    progress_layout.addWidget(current_time_label)
+    progress_layout.addWidget(progress_bar)
+    progress_layout.addWidget(total_duration_label)
 
     music_bar_layout.addLayout(playback_controls_layout)
-    music_bar_layout.addWidget(progress_bar)
-    music_bar_layout.addWidget(current_time_label, alignment=Qt.AlignLeft)
-    music_bar_layout.addWidget(progress_bar, alignment=Qt.AlignCenter)
-    music_bar_layout.addWidget(total_duration_label, alignment=Qt.AlignRight)
-
+    music_bar_layout.addLayout(progress_layout)
 
     # Create a new QWidget for the music bar and set the layout
     music_bar_widget = QWidget()
     music_bar_widget.setLayout(music_bar_layout)
-
-    # Removing old widgets and layouts
-    layout.removeWidget(play_pause_button_playback)
-    layout.removeWidget(title_label_playback)
 
     # Add to main layout
     layout.addWidget(music_bar_widget)
@@ -233,9 +241,6 @@ def create_music_tab():
                 info_dict = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 audio_url = info_dict['url']
 
-                title_label.setText(info_dict.get('title', 'Unknown Title'))
-                duration_label.setText(f"Duration: {info_dict.get('duration', 'N/A')} seconds")
-
                 # Set the progress bar's maximum value to the song's duration
                 song_duration = info_dict.get('duration', 0)  # in seconds
                 progress_bar.setMaximum(song_duration * 1000)  # convert to ms
@@ -266,7 +271,8 @@ def create_music_tab():
         nonlocal is_playing
         if player.get_state() == vlc.State.Playing:
             player.pause()
-            play_pause_button.setText("▶️")
+            play_pause_button_playback.setIcon(QIcon("./icons/play.png"))
+            play_pause_button.setIcon(QIcon("./icons/play.png"))
             progress_timer.stop()
             is_playing = False
         else:
@@ -275,7 +281,8 @@ def create_music_tab():
             else:
                 player.play()
                 progress_timer.start(1000)
-            play_pause_button.setText("⏸︎")    
+            play_pause_button_playback.setIcon(QIcon("./icons/pause.png"))
+            play_pause_button.setIcon(QIcon("./icons/pause.png"))
             is_playing = True
 
     def play_next_song():
@@ -297,7 +304,6 @@ def create_music_tab():
     prev_song_button.clicked.connect(play_prev_song)
     search_button.clicked.connect(search_song)
     play_pause_button_playback.clicked.connect(toggle_play_pause)
-    play_pause_button.setText("▶️")
     next_song_button.setText("⏭️")
     prev_song_button.setText("⏮️")
 
@@ -325,3 +331,39 @@ class CustomSlider(QSlider):
         self.setValue(int(new_value))
         self._player.set_time(self.value())  # Update the player's position
         super().mouseMoveEvent(event)
+
+class AnimatedLabel(QWidget):
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self.text = text
+        self.offset = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.speed = 1
+        self.delay = 50
+        self.interval = 50
+        self.timer.start(self.interval)
+
+    def animate(self):
+        if self.fontMetrics().width(self.text) > self.width():
+            self.offset -= self.speed
+            if abs(self.offset) > self.fontMetrics().width(self.text):
+                self.offset = 0
+                self.timer.setInterval(self.delay)  # delay for a while before restarting
+            else:
+                self.timer.setInterval(self.interval)
+        self.update()
+
+    def setText(self, text):
+        self.text = text
+        self.offset = 0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.drawText(self.offset, 0, self.fontMetrics().width(self.text), self.height(), Qt.AlignVCenter | Qt.AlignLeft, self.text)
+        if self.fontMetrics().width(self.text) > self.width():
+            painter.drawText(self.offset + self.fontMetrics().width(self.text), 0, self.fontMetrics().width(self.text), self.height(), Qt.AlignVCenter | Qt.AlignLeft, self.text)
+    
+    def sizeHint(self):
+        return QSize(self.fontMetrics().width(self.text), super().sizeHint().height())
