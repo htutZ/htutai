@@ -166,7 +166,7 @@ def create_music_tab():
     player.audio_set_volume(60)  # Set the default volume to 60
     is_playing = False
 
-    progress_bar = QSlider(Qt.Horizontal)
+    progress_bar = CustomSlider(player, Qt.Horizontal)
     # Current time label
     current_time_label = QLabel("00:00")
     layout.addWidget(current_time_label, alignment=Qt.AlignLeft)
@@ -202,15 +202,6 @@ def create_music_tab():
     layout.addWidget(music_bar_widget)
     progress_timer = QTimer()
 
-    # Progress bar mouse click event
-    def progress_bar_clicked(event):
-        fraction = event.x() / progress_bar.width()
-        new_value = fraction * progress_bar.maximum()
-        progress_bar.setValue(int(new_value))
-        player.set_time(int(new_value))
-
-    progress_bar.mousePressEvent = progress_bar_clicked
-
     # Update the progress bar and current time label every second
     def update_progress():
         current_time = player.get_time()
@@ -218,12 +209,6 @@ def create_music_tab():
         current_time_label.setText(format_time(current_time))
 
     progress_timer.timeout.connect(update_progress)
-
-        # This function will be called when the user adjusts the progress bar
-    def update_player_position(value):
-        player.set_time(value)  # Convert from milliseconds to seconds
-
-    progress_bar.sliderMoved.connect(update_player_position)
 
     def play_selected_song():
         nonlocal is_playing
@@ -318,3 +303,25 @@ def create_music_tab():
 
     widget.setLayout(layout)
     return widget
+
+class CustomSlider(QSlider):
+
+    def __init__(self, player, *args, **kwargs):
+        super(CustomSlider, self).__init__(*args, **kwargs)
+        self._player = player
+
+    def mousePressEvent(self, event):
+        """Jump to click position."""
+        fraction = event.x() / self.width()
+        new_value = fraction * self.maximum()
+        self.setValue(int(new_value))
+        self._player.set_time(self.value())  # Update the player's position
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        """Make the slider follow the cursor while dragging."""
+        fraction = event.x() / self.width()
+        new_value = fraction * self.maximum()
+        self.setValue(int(new_value))
+        self._player.set_time(self.value())  # Update the player's position
+        super().mouseMoveEvent(event)
