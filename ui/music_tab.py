@@ -1,8 +1,9 @@
 from PySide2.QtWidgets import (QListWidget, QVBoxLayout, QPushButton, QWidget, QTextEdit, QHBoxLayout, QComboBox,
                                QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication, QSizePolicy)
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent
-from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize
+from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize, QThreadPool, QRunnable, Signal, QObject
 from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter
+
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -16,48 +17,17 @@ import pythoncom
 import yt_dlp
 import requests
 import logging
+import threading
+
+from Classes.Utilities import (dominant_color_from_url, search_youtube, search_spotify, search_ytm, 
+                          get_stream_url, get_youtube_video_id, format_time)
+from Classes.Widgets import CustomSlider, AnimatedLabel
+from Classes.SignalsAndWorkers import Worker, SongFoundSignal
+
 logging.getLogger('pytube').setLevel(logging.CRITICAL)
 
 os.environ["PAFY_BACKEND"] = "yt_dlp"
 ytmusic = YTMusic('headers_auth.json')
-# Set up Spotify credentials
-sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id="92b308edd46a4134894df230bf543670",
-                                                           client_secret="9ef2001ccf21447f937679801d935b3d"))
-
-
-def dominant_color_from_url(url):
-    """Get the dominant color from an image URL."""
-    response = requests.get(url)
-    color_thief = ColorThief(BytesIO(response.content))
-    dominant_color = color_thief.get_color(quality=1)
-    return QColor(*dominant_color)
-    
-def search_youtube(query, max_results=10):
-    search_results = Search(query).results[:max_results]
-    return [(video.title, video.video_id) for video in search_results]
-
-def search_spotify(query):
-    results = sp.search(q=query, limit=5)
-    return [track['name'] for track in results['tracks']['items']]
-
-def search_ytm(query):
-    search_results = ytmusic.search(query, filter="songs")
-    if search_results:
-        return search_results[0]['videoId']
-    else:
-        return None
-    
-def get_stream_url(video_id):
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    yt = pytube.YouTube(url)
-    stream = yt.streams.filter(only_audio=True).first()
-    return stream.url
-
-def format_time(ms):
-    """Convert milliseconds into MM:SS format."""
-    s = ms // 1000
-    m, s = divmod(s, 60)
-    return f"{m:02d}:{s:02d}"
 
 def create_music_tab():
 
@@ -81,7 +51,10 @@ def create_music_tab():
     widget = QWidget()
     layout = QVBoxLayout()
 
-    loop_modes = ["No Loop", "Repeat One", "Repeat All"]
+    # Loading indicator
+    loading_label = QLabel("Loading...", widget)
+    loading_label.hide()
+    layout.addWidget(loading_label)
 
     # Search bar
     search_bar = QLineEdit(widget)
@@ -127,18 +100,36 @@ def create_music_tab():
     def search_song():
         query = search_bar.text()
         song_list_widget.clear()
-        youtube_results = search_youtube(query)
+        loading_label.show()
 
-        for title, video_id in youtube_results:
-            song_database[title] = video_id
 
+        def add_song_to_list(title, icon):
             item = QListWidgetItem(title)
+            item.setIcon(icon)
             song_list_widget.addItem(item)
-            print(f"Video ID for '{title}': {video_id}")
 
-            thumbnail_url = f"http://i4.ytimg.com/vi/{video_id}/default.jpg"
-            thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
-            item.setIcon(QIcon(thumbnail))
+        song_signal = SongFoundSignal()
+        song_signal.song_found.connect(add_song_to_list)
+
+        def search_worker(dummy_signal_instance):
+            try:
+                spotify_results = search_spotify(query)
+                for title, spotify_thumbnail_url in spotify_results:
+                    if title not in song_database:
+                        video_id = get_youtube_video_id(title)
+                        if video_id:
+                            song_database[title] = video_id
+                            thumbnail = get_thumbnail_as_pixmap(spotify_thumbnail_url)
+                            icon = QIcon(thumbnail)
+                            song_signal.song_found.emit(title, icon)
+            except Exception as e:
+                print(f"Error in search worker: {e}")
+            finally:
+                loading_label.hide()
+
+        dummy_signal = SongFoundSignal()
+        task = Worker(search_worker, dummy_signal)
+        QThreadPool.globalInstance().start(task)
 
     instance = vlc.Instance()
     player = instance.media_player_new() 
@@ -299,6 +290,7 @@ def create_music_tab():
             song_list_widget.setCurrentRow(current_row - 1)
         play_selected_song()
 
+    song_list_widget.itemDoubleClicked.connect(play_selected_song)
     play_pause_button.clicked.connect(toggle_play_pause)
     next_song_button.clicked.connect(play_next_song)
     prev_song_button.clicked.connect(play_prev_song)
@@ -309,61 +301,3 @@ def create_music_tab():
 
     widget.setLayout(layout)
     return widget
-
-class CustomSlider(QSlider):
-
-    def __init__(self, player, *args, **kwargs):
-        super(CustomSlider, self).__init__(*args, **kwargs)
-        self._player = player
-
-    def mousePressEvent(self, event):
-        """Jump to click position."""
-        fraction = event.x() / self.width()
-        new_value = fraction * self.maximum()
-        self.setValue(int(new_value))
-        self._player.set_time(self.value())  # Update the player's position
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """Make the slider follow the cursor while dragging."""
-        fraction = event.x() / self.width()
-        new_value = fraction * self.maximum()
-        self.setValue(int(new_value))
-        self._player.set_time(self.value())  # Update the player's position
-        super().mouseMoveEvent(event)
-
-class AnimatedLabel(QWidget):
-    def __init__(self, text="", parent=None):
-        super().__init__(parent)
-        self.text = text
-        self.offset = 0
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.animate)
-        self.speed = 1
-        self.delay = 50
-        self.interval = 50
-        self.timer.start(self.interval)
-
-    def animate(self):
-        if self.fontMetrics().width(self.text) > self.width():
-            self.offset -= self.speed
-            if abs(self.offset) > self.fontMetrics().width(self.text):
-                self.offset = 0
-                self.timer.setInterval(self.delay)  # delay for a while before restarting
-            else:
-                self.timer.setInterval(self.interval)
-        self.update()
-
-    def setText(self, text):
-        self.text = text
-        self.offset = 0
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.drawText(self.offset, 0, self.fontMetrics().width(self.text), self.height(), Qt.AlignVCenter | Qt.AlignLeft, self.text)
-        if self.fontMetrics().width(self.text) > self.width():
-            painter.drawText(self.offset + self.fontMetrics().width(self.text), 0, self.fontMetrics().width(self.text), self.height(), Qt.AlignVCenter | Qt.AlignLeft, self.text)
-    
-    def sizeHint(self):
-        return QSize(self.fontMetrics().width(self.text), super().sizeHint().height())
