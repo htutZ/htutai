@@ -1,25 +1,19 @@
 from PySide2.QtWidgets import (QListWidget, QVBoxLayout, QPushButton, QWidget, QTextEdit, QHBoxLayout, QComboBox,
-                               QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication, QSizePolicy)
+                               QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication, QSizePolicy, QStackedLayout)
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent
 from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize, QThreadPool, QRunnable, Signal, QObject
-from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter
-
+from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter, QMovie
 import os
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 from ytmusicapi import YTMusic
-import pytube
-from pytube import Search, YouTube
-from colorthief import ColorThief
-from io import BytesIO
 import vlc
 import pythoncom
 import yt_dlp
 import requests
 import logging
 import threading
-
-from Classes.Utilities import (dominant_color_from_url, search_youtube, search_spotify, search_ytm, 
+import time
+from fuzzywuzzy import fuzz
+from Classes.Utilities import (dominant_color_from_url, search_youtube, search_spotify,search_musicapi,search_deezer_rapidapi, search_ytm,search_deezer, search_lastfm, 
                           get_stream_url, get_youtube_video_id, format_time)
 from Classes.Widgets import CustomSlider, AnimatedLabel
 from Classes.SignalsAndWorkers import Worker, SongFoundSignal
@@ -28,6 +22,23 @@ logging.getLogger('pytube').setLevel(logging.CRITICAL)
 
 os.environ["PAFY_BACKEND"] = "yt_dlp"
 ytmusic = YTMusic('headers_auth.json')
+
+def filter_similar_songs(song_list):
+    threshold = 85  # Adjust this value as needed. The higher the value, the more exact the match must be.
+    filtered_list = []
+    
+    for song in song_list:
+        add_to_list = True
+        for existing_song in filtered_list:
+            if fuzz.ratio(song[0].split('\n')[0], existing_song[0].split('\n')[0]) > threshold and \
+               fuzz.ratio(song[0].split('\n')[1], existing_song[0].split('\n')[1]) > threshold:
+                add_to_list = False
+                break
+        if add_to_list:
+            filtered_list.append(song)
+    
+    return filtered_list
+
 
 def create_music_tab():
 
@@ -51,11 +62,6 @@ def create_music_tab():
     widget = QWidget()
     layout = QVBoxLayout()
 
-    # Loading indicator
-    loading_label = QLabel("Loading...", widget)
-    loading_label.hide()
-    layout.addWidget(loading_label)
-
     # Search bar
     search_bar = QLineEdit(widget)
     search_bar.setPlaceholderText('Search for songs...')
@@ -65,9 +71,21 @@ def create_music_tab():
     search_button = QPushButton("Search", widget)
     layout.addWidget(search_button)
 
+    # Initialize the stacked layout
+    stacked_layout = QStackedLayout()
+
     # Music list
     song_list_widget = QListWidget()
     layout.addWidget(song_list_widget)
+
+# Loading gif
+    loading_gif = QMovie("./assets/loading.gif")  # Adjust the path if necessary
+    loading_gif_label = QLabel(song_list_widget)  # set the parent to song_list_widget to overlay it
+    loading_gif_label.setMovie(loading_gif)
+    loading_gif.setScaledSize(QSize(350, 280))  # 50x50 pixels, adjust as necessary
+    loading_gif_label.setAlignment(Qt.AlignCenter)
+    loading_gif_label.setAttribute(Qt.WA_TranslucentBackground)  # make the label background transparent
+    loading_gif_label.hide()  # hide initially
 
     # Playback info layout
     playback_info_layout = QHBoxLayout()
@@ -97,35 +115,105 @@ def create_music_tab():
         pixmap = QPixmap(image)
         return pixmap
     
+    def get_channel_name_for_video(video_id):
+        ydl_opts = {
+            'quiet': True,
+            'extract_flat': True,
+            'force_generic_extractor': True,
+        }
+    
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
+            return info_dict.get('uploader', None)
+    
     def search_song():
         query = search_bar.text()
         song_list_widget.clear()
-        loading_label.show()
+        loading_gif_label.resize(song_list_widget.size())  # make the label the same size as the song list
+        loading_gif_label.show()
+        loading_gif.start()
 
-
-        def add_song_to_list(title, icon):
+        def add_song_to_list(title, icon=None):
             item = QListWidgetItem(title)
-            item.setIcon(icon)
+            if icon:
+                item.setIcon(icon)
             song_list_widget.addItem(item)
 
         song_signal = SongFoundSignal()
         song_signal.song_found.connect(add_song_to_list)
 
+        def is_song_similar(song1, song2):
+            threshold_title = 80
+            threshold_artist = 90 
+            
+            title1, artist1 = song1[0].split('\n')
+            title2, artist2 = song2[0].split('\n')
+             # Adjust this value as needed.
+            title_similarity = max(fuzz.partial_ratio(title1, title2), fuzz.token_sort_ratio(title1, title2))
+            artist_similarity = max(fuzz.partial_ratio(artist1, artist2), fuzz.token_sort_ratio(artist1, artist2))
+
+            return title_similarity > threshold_title and artist_similarity > threshold_artist
+
+        def add_song_to_final_list(song, final_list):
+            for existing_song in final_list:
+                if is_song_similar(song, existing_song):
+                   return  # If the song is similar to any song in the final list, don't add it
+            final_list.append(song)
+            song_signal.song_found.emit(song[0], song[1])
+
         def search_worker(dummy_signal_instance):
             try:
+                final_results = []
+            
+                youtube_results = search_youtube(query, max_results=5)  # Only the best result
+                for title, video_id in youtube_results:
+                    channel_name = get_channel_name_for_video(video_id)
+                    full_title = f"{title}\n{channel_name}"
+                    if full_title not in song_database and title != channel_name:
+                        song_database[full_title] = video_id
+                        thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+                        thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
+                        icon = QIcon(thumbnail)
+                        add_song_to_final_list((full_title, icon), final_results)
+
                 spotify_results = search_spotify(query)
-                for title, spotify_thumbnail_url in spotify_results:
-                    if title not in song_database:
-                        video_id = get_youtube_video_id(title)
+                for title, artist_name, spotify_thumbnail_url in spotify_results:
+                    full_title = f"{title}\n{artist_name}"
+                    if full_title not in song_database:
+                        video_id = get_youtube_video_id(f"{title} {artist_name}")
                         if video_id:
-                            song_database[title] = video_id
+                            song_database[full_title] = video_id
                             thumbnail = get_thumbnail_as_pixmap(spotify_thumbnail_url)
                             icon = QIcon(thumbnail)
-                            song_signal.song_found.emit(title, icon)
+                            add_song_to_final_list((full_title, icon), final_results)
+
+                musicapi_results = search_musicapi(query, query)
+                for title, artist_name, album_name, thumbnail_url, track_url in musicapi_results:
+                    full_title = f"{title}\n{artist_name}"
+                    if full_title not in song_database:
+                        video_id = get_youtube_video_id(f"{title} {artist_name}")
+                        if video_id:
+                            song_database[full_title] = video_id
+                            thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
+                            icon = QIcon(thumbnail)
+                            add_song_to_final_list((full_title, icon), final_results)
+                            
+                deezer_results = search_deezer_rapidapi(query)
+                for title, artist_name, album_cover in deezer_results:
+                    full_title = f"{title}\n{artist_name}"
+                    if full_title not in song_database:
+                        video_id = get_youtube_video_id(f"{title} {artist_name}")
+                        if video_id:
+                            song_database[full_title] = video_id
+                            thumbnail = get_thumbnail_as_pixmap(album_cover)
+                            icon = QIcon(thumbnail)
+                            add_song_to_final_list((full_title, icon), final_results)
+                    
             except Exception as e:
                 print(f"Error in search worker: {e}")
             finally:
-                loading_label.hide()
+                loading_gif.stop()
+                loading_gif_label.hide()
 
         dummy_signal = SongFoundSignal()
         task = Worker(search_worker, dummy_signal)
@@ -137,7 +225,6 @@ def create_music_tab():
     is_playing = False
 
     progress_bar = CustomSlider(player, Qt.Horizontal)
-
 
     # Adjusting the Music bar layout
     music_bar_layout = QVBoxLayout()

@@ -12,4 +12,5 @@ class Worker(QRunnable):
         self.func(self.signal_instance, *self.args)
 
 class SongFoundSignal(QObject):
-    song_found = Signal(str, QIcon)
+    song_found = Signal(str, QIcon) 
+
