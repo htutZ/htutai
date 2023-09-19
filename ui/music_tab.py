@@ -1,7 +1,7 @@
 from PySide2.QtWidgets import (QListWidget, QVBoxLayout, QPushButton, QWidget, QTextEdit, QHBoxLayout, QComboBox,
                                QLineEdit, QLabel, QListWidgetItem, QStyle, QSlider, QApplication, QSizePolicy, QStackedLayout)
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent
-from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize, QThreadPool, QRunnable, Signal, QObject
+from PySide2.QtCore import QUrl, QFile, QTextStream, Qt, QTimer, QSize, QThreadPool, QRunnable, Signal, QObject, QThread
 from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter, QMovie
 import os
 from ytmusicapi import YTMusic
@@ -133,6 +133,8 @@ def create_music_tab():
         loading_gif_label.show()
         loading_gif.start()
 
+        final_results = []
+
         def add_song_to_list(title, icon=None):
             item = QListWidgetItem(title)
             if icon:
@@ -161,63 +163,88 @@ def create_music_tab():
             final_list.append(song)
             song_signal.song_found.emit(song[0], song[1])
 
-        def search_worker(dummy_signal_instance):
-            try:
-                final_results = []
-            
-                youtube_results = search_youtube(query, max_results=5)  # Only the best result
-                for title, video_id in youtube_results:
-                    channel_name = get_channel_name_for_video(video_id)
-                    full_title = f"{title}\n{channel_name}"
-                    if full_title not in song_database and title != channel_name:
+
+         
+        def youtube_search_worker(dummy_signal_instance): 
+            youtube_results = search_youtube(query, max_results=5)  # Only the best result
+            for title, video_id in youtube_results:
+                channel_name = get_channel_name_for_video(video_id)
+                full_title = f"{title}\n{channel_name}"
+                if full_title not in song_database and title != channel_name:
+                    song_database[full_title] = video_id
+                    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+                    thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
+                    icon = QIcon(thumbnail)
+                    add_song_to_final_list((full_title, icon), final_results)
+
+        def spotify_search_worker(dummy_signal_instance):
+            spotify_results = search_spotify(query)
+            for title, artist_name, spotify_thumbnail_url in spotify_results:
+                full_title = f"{title}\n{artist_name}"
+                if full_title not in song_database:
+                    video_id = get_youtube_video_id(f"{title} {artist_name}")
+                    if video_id:
                         song_database[full_title] = video_id
-                        thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+                        thumbnail = get_thumbnail_as_pixmap(spotify_thumbnail_url)
+                        icon = QIcon(thumbnail)
+                        add_song_to_final_list((full_title, icon), final_results)
+
+        
+        def musicapi_search_worker(dummy_signal_instance):
+            musicapi_results = search_musicapi(query, query)
+            for title, artist_name, album_name, thumbnail_url, track_url in musicapi_results:
+                full_title = f"{title}\n{artist_name}"
+                if full_title not in song_database:
+                    video_id = get_youtube_video_id(f"{title} {artist_name}")
+                    if video_id:
+                        song_database[full_title] = video_id
                         thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
                         icon = QIcon(thumbnail)
                         add_song_to_final_list((full_title, icon), final_results)
 
-                spotify_results = search_spotify(query)
-                for title, artist_name, spotify_thumbnail_url in spotify_results:
-                    full_title = f"{title}\n{artist_name}"
-                    if full_title not in song_database:
-                        video_id = get_youtube_video_id(f"{title} {artist_name}")
-                        if video_id:
-                            song_database[full_title] = video_id
-                            thumbnail = get_thumbnail_as_pixmap(spotify_thumbnail_url)
-                            icon = QIcon(thumbnail)
-                            add_song_to_final_list((full_title, icon), final_results)
 
-                musicapi_results = search_musicapi(query, query)
-                for title, artist_name, album_name, thumbnail_url, track_url in musicapi_results:
-                    full_title = f"{title}\n{artist_name}"
-                    if full_title not in song_database:
-                        video_id = get_youtube_video_id(f"{title} {artist_name}")
-                        if video_id:
-                            song_database[full_title] = video_id
-                            thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
-                            icon = QIcon(thumbnail)
-                            add_song_to_final_list((full_title, icon), final_results)
-                            
-                deezer_results = search_deezer_rapidapi(query)
-                for title, artist_name, album_cover in deezer_results:
-                    full_title = f"{title}\n{artist_name}"
-                    if full_title not in song_database:
-                        video_id = get_youtube_video_id(f"{title} {artist_name}")
-                        if video_id:
-                            song_database[full_title] = video_id
-                            thumbnail = get_thumbnail_as_pixmap(album_cover)
-                            icon = QIcon(thumbnail)
-                            add_song_to_final_list((full_title, icon), final_results)
-                    
-            except Exception as e:
-                print(f"Error in search worker: {e}")
-            finally:
+        def deezer_search_worker(dummy_signal_instance):                    
+            deezer_results = search_deezer_rapidapi(query)
+            for title, artist_name, album_cover in deezer_results:
+                full_title = f"{title}\n{artist_name}"
+                if full_title not in song_database:
+                    video_id = get_youtube_video_id(f"{title} {artist_name}")
+                    if video_id:
+                        song_database[full_title] = video_id
+                        thumbnail = get_thumbnail_as_pixmap(album_cover)
+                        icon = QIcon(thumbnail)
+                        add_song_to_final_list((full_title, icon), final_results)
+
+        completed_threads_counter = 0 
+
+        def worker_finished():
+            nonlocal completed_threads_counter
+            completed_threads_counter += 1
+            if completed_threads_counter == len(search_threads):
                 loading_gif.stop()
-                loading_gif_label.hide()
+                loading_gif_label.hide()   
 
-        dummy_signal = SongFoundSignal()
-        task = Worker(search_worker, dummy_signal)
-        QThreadPool.globalInstance().start(task)
+        class SearchThread(QThread):
+            finished_signal = Signal()
+
+            def __init__(self, func):
+                super().__init__()
+                self.func = func
+
+            def run(self):
+                self.func(None)  # We don't use the signal here, so just pass None
+                self.finished_signal.emit()                    
+                    
+        search_threads = [
+            SearchThread(youtube_search_worker),
+            SearchThread(spotify_search_worker),
+            SearchThread(musicapi_search_worker),
+            SearchThread(deezer_search_worker),
+        ]
+
+        for thread in search_threads:
+            thread.finished_signal.connect(worker_finished)
+            thread.start()   
 
     instance = vlc.Instance()
     player = instance.media_player_new() 
