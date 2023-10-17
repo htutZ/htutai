@@ -1,44 +1,42 @@
-import requests
+from PySide2.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication
+from PySide2.QtCore import QTimer, QTime, Qt
 
-def search_musicapi(track: str, artist: str, sources=["spotify", "appleMusic", "youtube", "deezer"]):
-    url = "https://musicapi13.p.rapidapi.com/public/search"
+class ClockWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
 
-    payload = {
-        "track": track,
-        "artist": artist,
-        "type": "track",
-        "sources": sources
-    }
-    headers = {
-        "content-type": "application/json",
-        "X-RapidAPI-Key": "2d4e76f6dfmshe4465090fbe5c4ap159ae1jsn957f235ebcc4",
-        "X-RapidAPI-Host": "musicapi13.p.rapidapi.com"
-    }
+    def initUI(self):
+        layout = QVBoxLayout()
 
-    response = requests.post(url, json=payload, headers=headers)
+        # Digital Clock Display
+        self.digital_clock = QLabel()
+        self.digital_clock.setAlignment(Qt.AlignCenter)
+        
+        # Start timer to update the clock every second
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.start(1000)
+        self.update_time()  # Initial update
 
-    data = response.json()
+        layout.addWidget(self.digital_clock)
+        self.setLayout(layout)
 
-    if not data.get('tracks'):
-        return []
+    def update_time(self):
+        current_time = QTime.currentTime()
+        
+        # Use HTML and CSS to style the clock
+        text = f"""
+        <div style="color: #555; background-color: #f0f0f0; padding: 10px; border-radius: 5px;">
+            <h1 style="margin: 0; font-family: 'Arial'; font-size: 48px;">{current_time.toString("hh:mm:ss")}</h1>
+        </div>
+        """
+        
+        self.digital_clock.setText(text)
 
-    results = []
-    for track in data['tracks']:  
-        title = track['data']['name']
-        artist_names = track['data'].get('artistNames')
-        if artist_names and isinstance(artist_names, (list, tuple)):
-            artist_names = ', '.join(artist_names)
-        else:
-            artist_names = ''
-        album_name = track['data']['albumName']
-        image_url = track['data']['imageUrl']
-        track_url = track['data']['url']
-        results.append((title, artist_names, album_name, image_url, track_url))
-
-    return results
-
-# Sample usage
-if __name__ == "__main__":
-    results = search_musicapi("Bezos I", "Bo Burnham")
-    for title, artists, album, cover, url in results:
-        print(f"Title: {title}, Artists: {artists}, Album: {album}, Cover: {cover}, URL: {url}")
+if __name__ == '__main__':
+    app = QApplication([])
+    window = ClockWidget()
+    window.resize(300, 150)
+    window.show()
+    app.exec_()
