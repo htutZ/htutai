@@ -1,6 +1,7 @@
 from PySide2.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, QGraphicsOpacityEffect)
-from PySide2.QtCore import QTimer, Qt, QTime, QRect, QPropertyAnimation, QEasingCurve, QDateTime
+from PySide2.QtCore import QTimer, Qt, QTime, QRect, QPropertyAnimation, QEasingCurve, QDateTime, QTimeZone
 from PySide2.QtGui import QFont, QFontDatabase
+import datetime
 
 class CustomWidget(QWidget):
     def __init__(self):
@@ -18,11 +19,12 @@ class CustomWidget(QWidget):
         QFontDatabase.addApplicationFont("fonts\DS-Digital-Bold.TTF")
 
         # Digital Clock Display
-        self.digital_clock = QLabel()
+        self.clock_container = QWidget(self)
+        self.clock_container.setFixedSize(1345, 250)    
+        self.digital_clock = QLabel(self.clock_container)
         self.digital_clock.setAlignment(Qt.AlignCenter)
         self.digital_clock.setFont(QFont("DS-Digital", 60))
-        self.digital_clock.setContentsMargins(0, 20, 0, 0)
-    
+
         # Style for the digital clock
         digital_clock_style = """
         QLabel {
@@ -32,49 +34,38 @@ class CustomWidget(QWidget):
         }
         """
         self.digital_clock.setStyleSheet(digital_clock_style)
-
-        # Date Display
-        self.date_label = QLabel()
-        self.date_label.setAlignment(Qt.AlignCenter)
-        self.date_label.setFont(QFont("DS-Digital", 20))
-    
+       
         # Style for the date label
         date_label_style = """
         QLabel {
             color: cyan;
             background-color: transparent;
             border: none;
-            margin-bottom: -25px;
         }
         """
+
+        # Date Display
+        self.date_label = QLabel(self.clock_container)
+        self.date_label.setFont(QFont("DS-Digital", 20))  # Made this larger than the timezone label
         self.date_label.setStyleSheet(date_label_style)
 
         # Timezone Display
-        self.timezone_label = QLabel("(Asia/Rangoon)")
-        self.timezone_label.setAlignment(Qt.AlignCenter)
-        self.timezone_label.setFont(QFont("DS-Digital", 14))
-        self.timezone_label.setContentsMargins(0, 0, 0, 20)
+        self.timezone_label = QLabel(self.clock_container)
+        self.timezone_label.setFont(QFont("DS-Digital", 15))  # Made this smaller
         self.timezone_label.setStyleSheet(date_label_style)
 
-        # Container for the clock and date
-        self.clock_container = QWidget()
-        clock_layout = QVBoxLayout()
-        clock_layout.addStretch(3)
-        clock_layout.addWidget(self.digital_clock)
-        clock_layout.addStretch(1)
-        clock_layout.addWidget(self.date_label)
-        clock_layout.addWidget(self.timezone_label)
-        clock_layout.addStretch(3)
-        self.clock_container.setLayout(clock_layout)
-    
+        # Adjusting the size and position of the labels
+        container_width = 1345
+        self.digital_clock.setGeometry((container_width - 400) // 2, 67, 400, 80)
+        self.date_label.setGeometry((container_width - 290) // 2, 147, 400, 50)
+        self.timezone_label.setGeometry((container_width - 215) // 2, 187, 400, 30)
+
         # Style for the container box that holds both clock and date
         container_style = """
         QWidget {
             background-color: black;
             border: 3px solid cyan;
             border-radius: 15px;
-            padding: 20px;
-            margin: 20px;
         }
         """
         self.clock_container.setStyleSheet(container_style)
@@ -191,6 +182,10 @@ class CustomWidget(QWidget):
         self.digital_clock.setText(current_time.toString("hh:mm:ss"))
         current_date = QDateTime.currentDateTime()
         self.date_label.setText(current_date.toString("dddd, MMMM d, yyyy"))
+        
+        # Getting the timezone information and setting it to timezone_label
+        tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+        self.timezone_label.setText(tz.tzname(None))
 
 def create_clock_tab():
     return CustomWidget()
