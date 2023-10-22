@@ -368,14 +368,6 @@ def create_music_tab():
 
     progress_timer.timeout.connect(update_progress)
 
-    def play_next_song():
-        global recommended_songs_queue
-        if recommended_songs_queue:
-            next_song, next_artist = recommended_songs_queue.pop(0)
-            print(f"Playing next recommended song: {next_song} by {next_artist}")
-        elif len(recommended_songs_queue) <= 2:
-            recommended_songs_queue.extend(fetch_recommendations(next_song, next_artist))
-
     def play_selected_song():
         nonlocal is_playing
         try:
@@ -429,6 +421,14 @@ def create_music_tab():
                 
         except Exception as e:
             print(f"Error playing song: {e}")
+
+    def play_next_song():
+        global recommended_songs_queue
+        if recommended_songs_queue:
+            next_song, next_artist = recommended_songs_queue.pop(0)
+            print(f"Playing next recommended song: {next_song} by {next_artist}")
+        elif len(recommended_songs_queue) <= 2:
+            recommended_songs_queue.extend(fetch_recommendations(next_song, next_artist))
 
     def toggle_play_pause():
         nonlocal is_playing
