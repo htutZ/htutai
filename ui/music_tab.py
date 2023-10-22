@@ -13,7 +13,7 @@ import logging
 import threading
 import time
 from fuzzywuzzy import fuzz
-from Classes.Utilities import (dominant_color_from_url, search_youtube, search_spotify,search_musicapi,search_deezer_rapidapi, search_ytm,search_deezer, search_lastfm, 
+from Classes.Utilities import (dominant_color_from_url, search_youtube, search_spotify,search_musicapi,search_deezer_rapidapi, search_ytm,search_deezer, get_spotify_token, search_for_track_id, get_recommendations_by_track_id, get_spotify_recommendations, search_lastfm, 
                           get_stream_url, get_youtube_video_id, format_time)
 from Classes.Widgets import CustomSlider, AnimatedLabel
 from Classes.SignalsAndWorkers import Worker, SongFoundSignal
@@ -22,6 +22,7 @@ logging.getLogger('pytube').setLevel(logging.CRITICAL)
 
 os.environ["PAFY_BACKEND"] = "yt_dlp"
 ytmusic = YTMusic('headers_auth.json')
+recommended_songs_queue = []
 
 def filter_similar_songs(song_list):
     threshold = 85  # Adjust this value as needed. The higher the value, the more exact the match must be.
@@ -39,6 +40,32 @@ def filter_similar_songs(song_list):
     
     return filtered_list
 
+recommended_songs_queue = []
+recently_played = set()
+
+def fetch_recommendations(song_name, artist_name):
+    print(f"Fetching recommendations for {song_name} by {artist_name}")
+    token = get_spotify_token()
+    print(f"Spotify Token: {token}")
+    track_id = search_for_track_id(token, song_name, artist_name)
+    print(f"Track ID for {song_name}: {track_id}")
+    if not track_id:
+        return []
+    recommendations = get_recommendations_by_track_id(token, track_id)
+    songs = []
+    for track in recommendations['tracks']:
+        track_name = track['name']
+        track_artist = track['artists'][0]['name']
+        if (track_name, track_artist) not in recently_played:  # Avoid adding recently played songs
+            songs.append((track_name, track_artist))
+            recently_played.add((track_name, track_artist))
+    print(f"Recommendations: {songs}")
+    return songs
+
+# Example Usage
+client_id = 'YOUR_SPOTIFY_CLIENT_ID'
+client_secret = 'YOUR_SPOTIFY_CLIENT_SECRET'
+user_id = 'SPOTIFY_USER_ID'
 
 def create_music_tab():
 
@@ -191,17 +218,35 @@ def create_music_tab():
 
         
         def musicapi_search_worker(dummy_signal_instance):
-            musicapi_results = search_musicapi(query, query)
-            for title, artist_name, album_name, thumbnail_url, track_url in musicapi_results:
-                full_title = f"{title}\n{artist_name}"
-                if full_title not in song_database:
-                    video_id = get_youtube_video_id(f"{title} {artist_name}")
-                    if video_id:
-                        song_database[full_title] = video_id
-                        thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
-                        icon = QIcon(thumbnail)
-                        add_song_to_final_list((full_title, icon), final_results)
+            try:
+                musicapi_results = search_musicapi(query, query)
+                if not musicapi_results:
+                    print("No results from musicapi")
+                    return
+                
+                for result in musicapi_results:
+                    if not result or not result.get('data'):
+                        print("Invalid or empty result from musicapi")
+                        continue
 
+                    title = result.get('data', {}).get('name', None)
+                    artist_name = result.get('data', {}).get('artist', {}).get('name', None)
+                    album_name = result.get('data', {}).get('album', {}).get('title', None)
+                    thumbnail_url = result.get('data', {}).get('album', {}).get('cover_medium', None)
+                    track_url = result.get('data', {}).get('preview', None)
+
+                    if all([title, artist_name, album_name, thumbnail_url, track_url]):
+                        full_title = f"{title}\n{artist_name}"
+                        if full_title not in song_database:
+                            video_id = get_youtube_video_id(f"{title} {artist_name}")
+                            if video_id:
+                                song_database[full_title] = video_id
+                                thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
+                                icon = QIcon(thumbnail)
+                                add_song_to_final_list((full_title, icon), final_results)
+
+            except Exception as e:
+                print(f"Error in musicapi_search_worker: {e}")
 
         def deezer_search_worker(dummy_signal_instance):                    
             deezer_results = search_deezer_rapidapi(query)
@@ -323,6 +368,14 @@ def create_music_tab():
 
     progress_timer.timeout.connect(update_progress)
 
+    def play_next_song():
+        global recommended_songs_queue
+        if recommended_songs_queue:
+            next_song, next_artist = recommended_songs_queue.pop(0)
+            print(f"Playing next recommended song: {next_song} by {next_artist}")
+        elif len(recommended_songs_queue) <= 2:
+            recommended_songs_queue.extend(fetch_recommendations(next_song, next_artist))
+
     def play_selected_song():
         nonlocal is_playing
         try:
@@ -341,7 +394,7 @@ def create_music_tab():
                 'preferredquality': '192',
               }],
             }
-
+    
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 audio_url = info_dict['url']
@@ -369,6 +422,11 @@ def create_music_tab():
                 is_playing = True
                 progress_timer.start(1000)  # Update every second
                 
+                global recommended_songs_queue
+                recommended_songs_queue.clear()
+                recommended_songs_queue = fetch_recommendations(info_dict.get('title'), info_dict.get('uploader'))
+                print(recommended_songs_queue)
+                
         except Exception as e:
             print(f"Error playing song: {e}")
 
@@ -391,12 +449,23 @@ def create_music_tab():
             is_playing = True
 
     def play_next_song():
-        current_row = song_list_widget.currentRow()
-        if current_row < song_list_widget.count() - 1:
-            song_list_widget.setCurrentRow(current_row + 1)
-        elif loop_control.currentText() == "Repeat All":
-            song_list_widget.setCurrentRow(0)
-        play_selected_song()
+        global recommended_songs_queue
+        if recommended_songs_queue:
+            next_recommended_song = recommended_songs_queue.pop(0) 
+            video_id = song_database.get(next_recommended_song.split('\n')[0])  # Get video_id from song title
+            if video_id:
+                selected_song = next_recommended_song
+
+            else:
+                print(f"No video ID found for song: {next_recommended_song}")
+        else:
+
+            current_row = song_list_widget.currentRow()
+            if current_row < song_list_widget.count() - 1:
+               song_list_widget.setCurrentRow(current_row + 1)
+            elif loop_control.currentText() == "Repeat All":
+               song_list_widget.setCurrentRow(0)
+            play_selected_song()
 
     def play_prev_song():
         current_row = song_list_widget.currentRow()

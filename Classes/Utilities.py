@@ -40,13 +40,79 @@ LASTFM_API_KEY = '27125370b7dd847e69b366dd3dc97993'
 
 DEEZER_API_ENDPOINT = "https://api.deezer.com/search"
 
-current_spotify_credential_index = 0
+SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/api/token'
+SPOTIFY_BASE_URL = 'https://api.spotify.com/v1'
+
+current_spotify_credential_index = 0\
+
+def rotate_spotify_credentials():
+    """Rotate to the next available Spotify credentials."""
+    global current_spotify_credential_index
+    current_spotify_credential_index = (current_spotify_credential_index + 1) % len(SPOTIFY_CREDENTIALS)
+
+def spotify_authenticate():
+    global current_spotify_credential_index
+    retry_count = len(SPOTIFY_CREDENTIALS)
+    
+    while retry_count > 0:
+        credentials = SPOTIFY_CREDENTIALS[current_spotify_credential_index]
+        try:
+            auth_response = requests.post(SPOTIFY_AUTH_URL, {
+                'grant_type': 'client_credentials',
+                'client_id': credentials['client_id'],
+                'client_secret': credentials['client_secret'],
+            })
+            
+            auth_response_data = auth_response.json()
+            if auth_response.status_code == 200:
+                access_token = auth_response_data['access_token']
+                headers = {
+                    'Authorization': 'Bearer {token}'.format(token=access_token)
+                }
+                return headers
+            elif auth_response.status_code == 429:  # Rate limiting
+                print("Rate limited. Retrying...")
+                rotate_spotify_credentials()
+                retry_count -= 1
+            elif auth_response.status_code == 401:  # Unauthorized
+                print("Credentials unauthorized. Trying next...")
+                rotate_spotify_credentials()
+                retry_count -= 1
+            else:
+                print(f"Error: {auth_response.status_code} - {auth_response_data.get('error_description')}")
+                rotate_spotify_credentials()
+                retry_count -= 1
+        except requests.RequestException as e:
+            print(f"Request error: {e}")
+            retry_count -= 1
+
+    print("All credentials exhausted.")
+    return None
 
 def initialize_spotify(credentials):
     client_credentials_manager = SpotifyClientCredentials(client_id=credentials['client_id'],
                                                           client_secret=credentials['client_secret'])
     sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
     return sp
+
+def search_spotify_for_track_id(track_name, artist_name):
+    headers = spotify_authenticate()
+    query = f"track:{track_name} artist:{artist_name}"
+    search_url = SPOTIFY_BASE_URL + f"/search?q={query}&type=track&limit=1"
+    response = requests.get(search_url, headers=headers)
+    response_data = response.json()
+    tracks = response_data['tracks']['items']
+    if tracks:
+        return tracks[0]['id']
+    return None
+
+def get_spotify_recommendations(sp, track_id):
+    try:
+        recommendations = sp.recommendations(seed_tracks=[track_id], limit=10)
+        return recommendations['tracks']
+    except Exception as e:
+        print(f"Error getting Spotify recommendations: {e}")
+        return []
 
 def dominant_color_from_url(url):
     """Get the dominant color from an image URL."""
@@ -58,6 +124,66 @@ def dominant_color_from_url(url):
 def search_youtube(query, max_results=5):
     search_results = Search(query).results[:max_results]
     return [(video.title, video.video_id) for video in search_results]
+
+def get_spotify_token():
+    global current_spotify_credential_index
+    credentials = SPOTIFY_CREDENTIALS[current_spotify_credential_index]
+
+    auth_url = 'https://accounts.spotify.com/api/token'
+    auth_response = requests.post(auth_url, {
+        'grant_type': 'client_credentials',
+        'client_id': credentials['client_id'],
+        'client_secret': credentials['client_secret']
+    })
+
+    auth_response_data = auth_response.json()
+    return auth_response_data['access_token']
+
+def search_for_track_id(token, track_name, artist_name=None):
+    track_name = track_name.split('(')[0].strip()
+    
+    # First, try searching with both the song title and artist name
+    query = f"{track_name} artist:{artist_name}" if artist_name else track_name
+    track_id = perform_spotify_search(token, query)
+    
+    # If no results, try searching with the song title only
+    if track_id is None and artist_name:
+        query = track_name
+        track_id = perform_spotify_search(token, query)
+    
+    return track_id
+
+def perform_spotify_search(token, query):
+    search_url = 'https://api.spotify.com/v1/search'
+    params = {
+        'q': query,
+        'type': 'track',
+        'limit': 1
+    }
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
+    response = requests.get(search_url, headers=headers, params=params)
+    results = response.json()
+    if not results['tracks']['items']:
+        print(f"No results for query: {query}")
+        print(f"Full API response: {results}")
+        return None
+    return results['tracks']['items'][0]['id']
+
+
+def get_recommendations_by_track_id(token, track_id):
+    token = get_spotify_token()
+    recommendations_url = 'https://api.spotify.com/v1/recommendations'
+    headers = {
+        'Authorization': f'Bearer {token}'
+    }
+    params = {
+        'seed_tracks': track_id
+    }
+    response = requests.get(recommendations_url, headers=headers, params=params)
+    return response.json()
+
 
 def search_spotify(query, limit=15):
     global current_spotify_credential_index
@@ -141,7 +267,10 @@ def search_musicapi(track: str, artist: str, sources=["appleMusic", "youtubeMusi
                 return []
             results = []
             for track in data['tracks']:  
-                title = track['data']['name']
+                if track and 'data' in track and track['data']:
+                   title = track['data'].get('name', None)
+                else:
+                   title = None
                 artist_names = track['data'].get('artistNames')
                 if artist_names and isinstance(artist_names, (list, tuple)):
                     artist_names = ', '.join(artist_names)
