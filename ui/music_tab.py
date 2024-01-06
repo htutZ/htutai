@@ -25,7 +25,7 @@ ytmusic = YTMusic('headers_auth.json')
 recommended_songs_queue = []
 
 def filter_similar_songs(song_list):
-    threshold = 85  # Adjust this value as needed. The higher the value, the more exact the match must be.
+    threshold = 85
     filtered_list = []
     
     for song in song_list:
@@ -56,7 +56,7 @@ def fetch_recommendations(song_name, artist_name):
     for track in recommendations['tracks']:
         track_name = track['name']
         track_artist = track['artists'][0]['name']
-        if (track_name, track_artist) not in recently_played:  # Avoid adding recently played songs
+        if (track_name, track_artist) not in recently_played:
             songs.append((track_name, track_artist))
             recently_played.add((track_name, track_artist))
     print(f"Recommendations: {songs}")
@@ -98,23 +98,22 @@ def create_music_tab():
     search_button = QPushButton("Search", widget)
     layout.addWidget(search_button)
 
-    # Initialize the stacked layout
     stacked_layout = QStackedLayout()
 
     # Music list
     song_list_widget = QListWidget()
     layout.addWidget(song_list_widget)
 
-# Loading gif
-    loading_gif = QMovie("./assets/loading.gif")  # Adjust the path if necessary
-    loading_gif_label = QLabel(song_list_widget)  # set the parent to song_list_widget to overlay it
+   # Loading gif
+    loading_gif = QMovie("./assets/loading.gif")
+    loading_gif_label = QLabel(song_list_widget)
     loading_gif_label.setMovie(loading_gif)
-    loading_gif.setScaledSize(QSize(350, 280))  # 50x50 pixels, adjust as necessary
+    loading_gif.setScaledSize(QSize(350, 280))
     loading_gif_label.setAlignment(Qt.AlignCenter)
-    loading_gif_label.setAttribute(Qt.WA_TranslucentBackground)  # make the label background transparent
-    loading_gif_label.hide()  # hide initially
+    loading_gif_label.setAttribute(Qt.WA_TranslucentBackground)
+    loading_gif_label.hide()
 
-    # Playback info layout
+    # playback info layout
     playback_info_layout = QHBoxLayout()
     thumbnail_label_playback = QLabel()
     title_label_playback = AnimatedLabel()
@@ -156,7 +155,7 @@ def create_music_tab():
     def search_song():
         query = search_bar.text()
         song_list_widget.clear()
-        loading_gif_label.resize(song_list_widget.size())  # make the label the same size as the song list
+        loading_gif_label.resize(song_list_widget.size()) 
         loading_gif_label.show()
         loading_gif.start()
 
@@ -177,7 +176,7 @@ def create_music_tab():
             
             title1, artist1 = song1[0].split('\n')
             title2, artist2 = song2[0].split('\n')
-             # Adjust this value as needed.
+
             title_similarity = max(fuzz.partial_ratio(title1, title2), fuzz.token_sort_ratio(title1, title2))
             artist_similarity = max(fuzz.partial_ratio(artist1, artist2), fuzz.token_sort_ratio(artist1, artist2))
 
@@ -186,14 +185,14 @@ def create_music_tab():
         def add_song_to_final_list(song, final_list):
             for existing_song in final_list:
                 if is_song_similar(song, existing_song):
-                   return  # If the song is similar to any song in the final list, don't add it
+                   return 
             final_list.append(song)
             song_signal.song_found.emit(song[0], song[1])
 
 
          
         def youtube_search_worker(dummy_signal_instance): 
-            youtube_results = search_youtube(query, max_results=5)  # Only the best result
+            youtube_results = search_youtube(query, max_results=5)
             for title, video_id in youtube_results:
                 channel_name = get_channel_name_for_video(video_id)
                 full_title = f"{title}\n{channel_name}"
@@ -206,6 +205,7 @@ def create_music_tab():
 
         def spotify_search_worker(dummy_signal_instance):
             spotify_results = search_spotify(query)
+            print(spotify_results)
             for title, artist_name, spotify_thumbnail_url in spotify_results:
                 full_title = f"{title}\n{artist_name}"
                 if full_title not in song_database:
@@ -215,38 +215,6 @@ def create_music_tab():
                         thumbnail = get_thumbnail_as_pixmap(spotify_thumbnail_url)
                         icon = QIcon(thumbnail)
                         add_song_to_final_list((full_title, icon), final_results)
-
-        
-        def musicapi_search_worker(dummy_signal_instance):
-            try:
-                musicapi_results = search_musicapi(query, query)
-                if not musicapi_results:
-                    print("No results from musicapi")
-                    return
-                
-                for result in musicapi_results:
-                    if not result or not result.get('data'):
-                        print("Invalid or empty result from musicapi")
-                        continue
-
-                    title = result.get('data', {}).get('name', None)
-                    artist_name = result.get('data', {}).get('artist', {}).get('name', None)
-                    album_name = result.get('data', {}).get('album', {}).get('title', None)
-                    thumbnail_url = result.get('data', {}).get('album', {}).get('cover_medium', None)
-                    track_url = result.get('data', {}).get('preview', None)
-
-                    if all([title, artist_name, album_name, thumbnail_url, track_url]):
-                        full_title = f"{title}\n{artist_name}"
-                        if full_title not in song_database:
-                            video_id = get_youtube_video_id(f"{title} {artist_name}")
-                            if video_id:
-                                song_database[full_title] = video_id
-                                thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
-                                icon = QIcon(thumbnail)
-                                add_song_to_final_list((full_title, icon), final_results)
-
-            except Exception as e:
-                print(f"Error in musicapi_search_worker: {e}")
 
         def deezer_search_worker(dummy_signal_instance):                    
             deezer_results = search_deezer_rapidapi(query)
@@ -277,13 +245,12 @@ def create_music_tab():
                 self.func = func
 
             def run(self):
-                self.func(None)  # We don't use the signal here, so just pass None
+                self.func(None) 
                 self.finished_signal.emit()                    
                     
         search_threads = [
             SearchThread(youtube_search_worker),
             SearchThread(spotify_search_worker),
-            SearchThread(musicapi_search_worker),
             SearchThread(deezer_search_worker),
         ]
 
@@ -293,21 +260,20 @@ def create_music_tab():
 
     instance = vlc.Instance()
     player = instance.media_player_new() 
-    player.audio_set_volume(60)  # Set the default volume to 60
+    player.audio_set_volume(60) 
     is_playing = False
 
     progress_bar = CustomSlider(player, Qt.Horizontal)
 
-    # Adjusting the Music bar layout
     music_bar_layout = QVBoxLayout()
 
-        # Current time label
+    # current time label
     current_time_label = QLabel("00:00")
 
-    # Total duration label
+    # total duration label
     total_duration_label = QLabel("00:00")
 
-        # Main controls
+    # controls
     controls_layout = QHBoxLayout()
     play_pause_button = QPushButton("▶️")
     next_song_button = QPushButton("⏭️")
@@ -316,28 +282,27 @@ def create_music_tab():
     loop_control.addItems(["No Loop", "Repeat One", "Repeat All"])
 
     container_widget = QWidget()
-    container_widget.setFixedWidth(450)  # Set a width based on your requirements
-# Create a layout for the container
+    container_widget.setFixedWidth(450)
+
+    # a layout for container
     container_layout = QHBoxLayout()
     container_layout.setSpacing(10) 
     
     container_widget.setLayout(container_layout)
-    container_layout.setContentsMargins(0, 0, 0, 0)  # This sets the margins to zero
+    container_layout.setContentsMargins(0, 0, 0, 0) 
 
-    # Remove QLabel's internal margins
     thumbnail_label_playback.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
 
-# Add the thumbnail and title to the container's layout
     container_layout.addWidget(thumbnail_label_playback)
     container_layout.addWidget(title_label_playback)
 
-    # Playback info and controls
+    # Playback controls
     playback_controls_layout = QHBoxLayout()
     playback_controls_layout.addWidget(container_widget) 
     playback_controls_layout.setContentsMargins(0, 0, 0, 0)
     playback_controls_layout.setSpacing(0)
-    # Adding spacers to push the controls to the center a bit
-    playback_controls_layout.addStretch(1.5)  # Adds some space before controls
+
+    playback_controls_layout.addStretch(1.5) 
     playback_controls_layout.addWidget(prev_song_button)
     playback_controls_layout.addWidget(play_pause_button_playback)
     playback_controls_layout.addWidget(next_song_button)
@@ -352,15 +317,12 @@ def create_music_tab():
     music_bar_layout.addLayout(playback_controls_layout)
     music_bar_layout.addLayout(progress_layout)
 
-    # Create a new QWidget for the music bar and set the layout
     music_bar_widget = QWidget()
     music_bar_widget.setLayout(music_bar_layout)
 
-    # Add to main layout
     layout.addWidget(music_bar_widget)
     progress_timer = QTimer()
 
-    # Update the progress bar and current time label every second
     def update_progress():
         current_time = player.get_time()
         progress_bar.setValue(current_time)
@@ -391,16 +353,14 @@ def create_music_tab():
                 info_dict = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 audio_url = info_dict['url']
 
-                # Set the progress bar's maximum value to the song's duration
-                song_duration = info_dict.get('duration', 0)  # in seconds
-                progress_bar.setMaximum(song_duration * 1000)  # convert to ms
+                song_duration = info_dict.get('duration', 0) 
+                progress_bar.setMaximum(song_duration * 1000) 
                 total_duration_label.setText(format_time(song_duration * 1000))
                 progress_timer.timeout.connect(lambda: progress_bar.setValue(player.get_time()))
                 
-                # Update playback info box
                 thumbnail_url = f"http://i4.ytimg.com/vi/{video_id}/default.jpg"
                 thumbnail = get_thumbnail_as_pixmap(thumbnail_url)
-                thumbnail_label_playback.setPixmap(thumbnail.scaled(50, 50, Qt.KeepAspectRatio))  # Small thumbnail
+                thumbnail_label_playback.setPixmap(thumbnail.scaled(50, 50, Qt.KeepAspectRatio)) 
                 title_label_playback.setText(info_dict.get('title', 'Unknown Title'))
                 dominant_color = dominant_color_from_url(thumbnail_url)
                 music_bar_widget.setStyleSheet(f"background-color: rgb({dominant_color.red()}, {dominant_color.green()}, {dominant_color.blue()});")
@@ -412,7 +372,7 @@ def create_music_tab():
                 player.play()
 
                 is_playing = True
-                progress_timer.start(1000)  # Update every second
+                progress_timer.start(1000) 
                 
                 global recommended_songs_queue
                 recommended_songs_queue.clear()
@@ -452,7 +412,7 @@ def create_music_tab():
         global recommended_songs_queue
         if recommended_songs_queue:
             next_recommended_song = recommended_songs_queue.pop(0) 
-            video_id = song_database.get(next_recommended_song.split('\n')[0])  # Get video_id from song title
+            video_id = song_database.get(next_recommended_song.split('\n')[0])  # video_id from song title
             if video_id:
                 selected_song = next_recommended_song
 

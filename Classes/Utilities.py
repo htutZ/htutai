@@ -1,6 +1,7 @@
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+import logging
 from ytmusicapi import YTMusic
 import pytube
 from pytube import Search
@@ -12,8 +13,11 @@ from PySide2.QtGui import QImage, QPixmap, QIcon, QPalette, QColor, QPainter
 ytmusic = YTMusic('headers_auth.json')
 import deezer
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 SPOTIFY_CREDENTIALS = [
-    {'client_id': '92b308edd46a4134894df230bf543670', 'client_secret': '9ef2001ccf21447f937679801d935b3d'},
+    {'client_id': '27b9d621b0344860b22480a9a0042240', 'client_secret': '8ca1c330100b4224b2b774383dffdfa7'},
     {'client_id': 'a04abef1ba5d4fc5a031fce0f094e5f8', 'client_secret': 'ae13a92da3f7438490c277acc29e9f84'},
     # ... add more credentials as needed
 ]
@@ -57,37 +61,22 @@ def spotify_authenticate():
     while retry_count > 0:
         credentials = SPOTIFY_CREDENTIALS[current_spotify_credential_index]
         try:
-            auth_response = requests.post(SPOTIFY_AUTH_URL, {
-                'grant_type': 'client_credentials',
-                'client_id': credentials['client_id'],
-                'client_secret': credentials['client_secret'],
-            })
-            
-            auth_response_data = auth_response.json()
-            if auth_response.status_code == 200:
-                access_token = auth_response_data['access_token']
-                headers = {
-                    'Authorization': 'Bearer {token}'.format(token=access_token)
-                }
-                return headers
-            elif auth_response.status_code == 429:  # Rate limiting
-                print("Rate limited. Retrying...")
-                rotate_spotify_credentials()
-                retry_count -= 1
-            elif auth_response.status_code == 401:  # Unauthorized
-                print("Credentials unauthorized. Trying next...")
-                rotate_spotify_credentials()
-                retry_count -= 1
-            else:
-                print(f"Error: {auth_response.status_code} - {auth_response_data.get('error_description')}")
-                rotate_spotify_credentials()
-                retry_count -= 1
-        except requests.RequestException as e:
-            print(f"Request error: {e}")
-            retry_count -= 1
+            client_credentials_manager = SpotifyClientCredentials(
+                client_id=credentials['client_id'],
+                client_secret=credentials['client_secret']
+            )
+            token = client_credentials_manager.get_access_token()
+            if token:
+                return {'Authorization': f'Bearer {token}'}
+        except spotipy.SpotifyException as e:
+            print(f"Spotify Authentication failed: {e}")
+        
+        rotate_spotify_credentials()
+        retry_count -= 1
 
     print("All credentials exhausted.")
     return None
+
 
 def initialize_spotify(credentials):
     client_credentials_manager = SpotifyClientCredentials(client_id=credentials['client_id'],
@@ -127,7 +116,20 @@ def search_youtube(query, max_results=5):
 
 def get_spotify_token():
     global current_spotify_credential_index
-    credentials = SPOTIFY_CREDENTIALS[current_spotify_credential_index]
+
+    for _ in range(len(SPOTIFY_CREDENTIALS)):
+        credentials = SPOTIFY_CREDENTIALS[current_spotify_credential_index]
+        try:
+            auth_manager = SpotifyClientCredentials(client_id=credentials['client_id'], client_secret=credentials['client_secret'])
+            token_info = auth_manager.get_access_token(as_dict=False, cache_path=None)  # Bypass the cache
+            return token_info
+        except spotipy.SpotifyException as e:
+            logger.error(f"Spotify Authentication failed: {e}")
+            rotate_spotify_credentials()
+
+    logger.error("Failed to obtain valid Spotify token with all available credentials.")
+    return None
+
 
     auth_url = 'https://accounts.spotify.com/api/token'
     auth_response = requests.post(auth_url, {
@@ -142,11 +144,9 @@ def get_spotify_token():
 def search_for_track_id(token, track_name, artist_name=None):
     track_name = track_name.split('(')[0].strip()
     
-    # First, try searching with both the song title and artist name
     query = f"{track_name} artist:{artist_name}" if artist_name else track_name
     track_id = perform_spotify_search(token, query)
     
-    # If no results, try searching with the song title only
     if track_id is None and artist_name:
         query = track_name
         track_id = perform_spotify_search(token, query)
@@ -197,11 +197,11 @@ def search_spotify(query, limit=15):
             results = [(track['name'], track['artists'][0]['name'], track['album']['images'][0]['url']) for track in response['tracks']['items']]
             break
         except spotipy.exceptions.SpotifyException:
-            # If rate limited or any other Spotify exception, switch credentials
             current_spotify_credential_index = (current_spotify_credential_index + 1) % len(SPOTIFY_CREDENTIALS)
             retry_count -= 1
 
     return results
+    
 
 # def search_soundcloud_rapidapi(query, limit=10):
 #     print("search_soundcloud_rapidapi called")
@@ -254,7 +254,6 @@ def search_musicapi(track: str, artist: str, sources=["appleMusic", "youtubeMusi
 
         response = requests.post(url, json=payload, headers=headers)
         
-        # If "Too Many Requests" which indicates rate limit, rotate the key and retry
         if response.status_code == 429:
             print("Rate limit reached for current RapidAPI key. Rotating to next key...")
             rotate_rapidapi_key()
@@ -300,9 +299,9 @@ def search_deezer_rapidapi(query, limit=10):
     }
     response = requests.get(url, headers=headers, params=params)
     
-    if response.status_code == 429:  # HTTP 429 is "Too Many Requests" which indicates rate limit
-        rotate_rapidapi_key()  # Switch to the next key
-        return search_deezer_rapidapi(query, limit)  # Retry with the new key
+    if response.status_code == 429: 
+        rotate_rapidapi_key() 
+        return search_deezer_rapidapi(query, limit) 
     
     elif response.status_code != 200:
         print(f"Failed to fetch data from Deezer. Status code: {response.status_code}")
@@ -310,7 +309,7 @@ def search_deezer_rapidapi(query, limit=10):
 
     data = response.json()
     results = []
-    for track in data['data'][:limit]:  # We limit the results to the specified limit
+    for track in data['data'][:limit]: 
         title = track['title']
         artist = track['artist']['name']
         album_cover = track['album']['cover_medium']
@@ -319,10 +318,9 @@ def search_deezer_rapidapi(query, limit=10):
     return results
 
 def search_deezer(query):
-    client = deezer.Client()  # Initialize the Deezer client
+    client = deezer.Client() 
     results = []
 
-    # Fetch search results
     search_results = client.search(query)
     if search_results:
         print(search_results[0].title)
@@ -330,13 +328,13 @@ def search_deezer(query):
         print(search_results[0].album.cover_medium)
         print(f"Number of results from Deezer for '{query}': {len(search_results)}")
         
-        for track in search_results[:10]:  # Limit to the first 10 results
+        for track in search_results[:10]: 
             title = track.title
             artist = track.artist.name
             album_cover = track.album.cover_medium
-            print(f"Processing - Title: {title}, Artist: {artist}, Album Cover: {album_cover}")  # Debug print
+            print(f"Processing - Title: {title}, Artist: {artist}, Album Cover: {album_cover}") 
             
-            if album_cover:  # Only add tracks with album covers
+            if album_cover:  
                 results.append((title, artist, album_cover))
             print(f"Results so far: {results}") 
     else:
@@ -362,13 +360,12 @@ def search_lastfm(query, artist=None, limit=15):
     for track in data['results']['trackmatches']['track']:
         title = track['name']
         artist_name = track['artist']
-        # Let's get the best available thumbnail
         image_url = None
         for image_data in reversed(track['image']):
             if image_data['#text']:
                 image_url = image_data['#text']
                 break
-        if image_url:  # Only add tracks with thumbnails
+        if image_url:  
             results.append((title, artist_name, image_url))
     
     return results

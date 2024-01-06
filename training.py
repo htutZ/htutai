@@ -1,107 +1,124 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from functions.load_responses import load_responses_from_database
-from functions.transliterate import transliterate
+import numpy as np
+import json
+import os
+from collections import Counter
 
-queries, responses, _ = load_responses_from_database()
-queries = [transliterate(query) for query in queries]
+data_dir = "databases"
 
-vocab = set(' '.join(queries))
-vocab_size = len(vocab)
-index_to_char = dict(enumerate(vocab))
-char_to_index = {char: idx for idx, char in index_to_char.items()}
+def load_data_from_json(category):
+    file_path = os.path.join(data_dir, f"{category}.json")
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    return data["queries"], data["responses"]
 
-def string_to_onehot(string, max_length=50):
-    tensor = torch.zeros(max_length, vocab_size)
-    for li, letter in enumerate(string):
-        if letter in char_to_index:  
-            tensor[li][char_to_index[letter]] = 1
-    return tensor
+categories = ["greetings", "reminders", "time"]
+all_queries, all_responses = [], []
 
-X = torch.stack([string_to_onehot(query) for query in queries])
-Y = torch.tensor([i for i, _ in enumerate(responses)])
+for category in categories:
+    queries, responses = load_data_from_json(category)
+    all_queries.extend(queries)
+    all_responses.extend(responses)
 
-class SimpleNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(SimpleNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
+def tokenize_and_build_vocab(texts):
+    tokens_list = [text.split() for text in texts]
+    vocab = Counter(token for tokens in tokens_list for token in tokens)
+    vocab['<PAD>'] = 0
+    vocab['<UNK>'] = 1
+    return tokens_list, vocab
+
+tokenized_queries, vocab = tokenize_and_build_vocab(all_queries)
+vocab = {word: idx + 2 for idx, (word, _) in enumerate(vocab.items())}
+
+def tokens_to_indices(tokens, vocab):
+    return [vocab.get(token, vocab['<UNK>']) for token in tokens]
+
+def pad_sequences(sequences, max_len):
+    padded_sequences = np.zeros((len(sequences), max_len), dtype=int)
+    for i, seq in enumerate(sequences):
+        end = min(len(seq), max_len)
+        padded_sequences[i, :end] = seq[:end]
+    return padded_sequences
+
+indices_queries = [tokens_to_indices(tokens, vocab) for tokens in tokenized_queries]
+max_seq_len = max(len(seq) for seq in indices_queries)
+padded_queries = pad_sequences(indices_queries, max_seq_len)
+
+response_to_idx = {response: idx for idx, response in enumerate(set(all_responses))}
+idx_to_response = {idx: response for response, idx in response_to_idx.items()}
+indices_responses = [response_to_idx[response] for response in all_responses]
+
+class LSTMModel(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim):
+        super(LSTMModel, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = self.fc2(x)
-        return self.softmax(x)
+        x = self.embedding(x)
+        x, _ = self.lstm(x)
+        x = self.dropout(x)
+        x = self.fc(x[:, -1, :])
+        return x
 
-split_idx = int(0.8 * len(queries))
-train_X = X[:split_idx]
-train_Y = Y[:split_idx]
-val_X = X[split_idx:]
-val_Y = Y[split_idx:]
+    def expand_output_layer(self, new_output_dim):
+        self.fc = nn.Linear(self.hidden_dim, new_output_dim)
 
-input_size = 50 * vocab_size
-print("Vocabulary Size:", vocab_size)
-print("Input Size:", input_size)
-hidden_size = 128
-output_size = len(responses)
-learning_rate = 0.005
-epochs = 1000
-batch_size = 2
+embedding_dim = 100
+hidden_dim = 128
+output_dim = len(response_to_idx)
+model = LSTMModel(len(vocab) + 2, embedding_dim, hidden_dim, output_dim)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.005)
 
-model = SimpleNN(input_size, hidden_size, output_size)
-criterion = nn.NLLLoss()
-optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+def interactive_training(user_query, user_response=None, correct=True):
+    global output_dim, model, optimizer
+    tokenized_query = user_query.split()
+    query_indices = [vocab.get(token, vocab['<UNK>']) for token in tokenized_query]
+    query_tensor = torch.tensor(pad_sequences([query_indices], max_seq_len), dtype=torch.long)
 
-train_data = torch.utils.data.TensorDataset(train_X, train_Y)
-train_loader = torch.utils.data.DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
+    if correct:
+        model.eval()
+        with torch.no_grad():
+            output = model(query_tensor)
+            predicted_idx = torch.argmax(output, dim=1).item()
+            bot_response = idx_to_response.get(predicted_idx, "I'm not sure what to say.")
+            print(f"Bot: {bot_response}")
+            feedback = input("Is this response correct? (yes/no): ").strip().lower()
+            if feedback == 'no':
+                correct_response = input("What should be the correct response? ")
+                model.train()
+                return interactive_training(user_query, correct_response, False)
+        return 
+    else:
+        model.train() 
+        if user_response not in response_to_idx:
+            response_to_idx[user_response] = output_dim
+            idx_to_response[output_dim] = user_response
+            output_dim += 1
+            new_output_layer = nn.Linear(hidden_dim, output_dim)
+            with torch.no_grad():
+                new_output_layer.weight[:model.fc.out_features] = model.fc.weight
+                new_output_layer.bias[:model.fc.out_features] = model.fc.bias
+            model.fc = new_output_layer
+            optimizer = optim.Adam(model.parameters(), lr=0.005)
 
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.9)
-patience = 20
-best_val_loss = float('inf')
-counter = 0
-
-def get_response(model, query):
-    model.eval()
-    with torch.no_grad():
-        input_tensor = string_to_onehot(transliterate(query))
-        prediction = model(input_tensor.view(1, -1))
-        response_idx = torch.argmax(prediction).item()
-        if response_idx < len(responses):
-            return responses[response_idx]
-        else:
-            return "I'm not sure what you mean."
-
-for epoch in range(epochs):
-    model.train()
-    for batch_X, batch_Y in train_loader:
+        response_index = response_to_idx[user_response]
+        response_tensor = torch.tensor([response_index], dtype=torch.long)
         optimizer.zero_grad()
-        output = model(batch_X.view(batch_X.size(0), -1))
-        loss = criterion(output, batch_Y)
+        output = model(query_tensor)
+        loss = criterion(output, response_tensor)
         loss.backward()
         optimizer.step()
-    
-    scheduler.step()
+        print(f"Corrected response learned. Loss: {loss.item()}")
 
-    model.eval()
-    with torch.no_grad():
-        val_output = model(val_X.view(val_X.size(0), -1))
-        val_loss = criterion(val_output, val_Y)
-        print(f"Epoch {epoch+1}, Val Loss: {val_loss.item()}")
-    
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        torch.save(model.state_dict(), "model.pth")
-        counter = 0
-    else:
-        counter += 1
-        if counter >= patience:
-            print("Early stopping")
-            break
-    
-    # Interaction every epoch
-    user_query = input("\nEnter a query to test the model (or 'exit' to continue training): ")
-    if user_query.lower() == "exit":
-        continue
-    else:
-        print(f"Model's Response: {get_response(model, user_query)}")
+while True:
+    user_query = input("\nEnter your query (or 'exit' to stop): ").strip()
+    if user_query.lower() == 'exit':
+        break
+    interactive_training(user_query)
