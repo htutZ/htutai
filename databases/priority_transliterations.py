@@ -18,5 +18,4 @@ priority_transliterations = {
     "mya": "မြ",
     "nya": "ည",
     "sha": "ရှ",
-    # Add more prioritized conversions here
 }
