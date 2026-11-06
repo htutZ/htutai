@@ -1,21 +1,28 @@
 import json
 import os
 
-def load_responses_from_database():
-    all_queries = []
-    all_responses = []
-    mapping = {}
-    index = 0
-    
-    files = os.listdir("databases")
-    for file_name in files:
-        if file_name.endswith(".json"):
-            with open(os.path.join("databases", file_name), "r", encoding="utf-8") as file:
-                data = json.load(file)
-                all_queries.extend(data["queries"])
-                all_responses.extend(data["responses"])
-                for i, response in enumerate(data["responses"]):
-                    mapping[index + i] = file_name.replace(".json", "")
-                index += len(data["responses"])
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FOLDER = os.path.join(BASE, "databases")
 
+
+def load_responses_from_database():
+    all_queries, all_responses, mapping = [], [], {}
+    index = 0
+    for file_name in sorted(os.listdir(FOLDER)):
+        if not file_name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(FOLDER, file_name), "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if not isinstance(data, dict) or "queries" not in data or "responses" not in data:
+            continue
+        qs, rs = data["queries"], data["responses"]
+        n = min(len(qs), len(rs))
+        all_queries.extend(qs[:n])
+        all_responses.extend(rs[:n])
+        for i in range(n):
+            mapping[index + i] = file_name.replace(".json", "")
+        index += n
     return all_queries, all_responses, mapping

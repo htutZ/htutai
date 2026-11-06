@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "provider": "ollama",
+  "model": "gemma3:4b",
+  "url": "http://127.0.0.1:11434",
+  "api_key": "",
+  "timeout": 180,
+  "keep_alive": "30m"
+}

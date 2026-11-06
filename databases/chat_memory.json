@@ -1,0 +1,162 @@
+[
+ {
+  "role": "user",
+  "content": "ဘာပြောတာလဲအဲ့တာ"
+ },
+ {
+  "role": "assistant",
+  "content": "ကွာမလည်ဘူး၊ အဖြေပြန်ပေးနော်။"
+ },
+ {
+  "role": "user",
+  "content": "နေကောင်းတယ်"
+ },
+ {
+  "role": "assistant",
+  "content": "ဟုတ်ကဲ့၊ ငါ့ကို ပြောလို့ရလေ။"
+ },
+ {
+  "role": "user",
+  "content": "နေကောင်းပါတယ်ဆို"
+ },
+ {
+  "role": "assistant",
+  "content": "အင်းပါပဲ၊ မင်းပြောတာနဲ့ ပိုကောင်းသွားတယ်။"
+ },
+ {
+  "role": "user",
+  "content": "ဘာလဲဟ"
+ },
+ {
+  "role": "assistant",
+  "content": "မသိဘူး၊ လမ်းလျှောက်ချင်လားနော်?"
+ },
+ {
+  "role": "user",
+  "content": "လျှောက်ချင်ဘူး"
+ },
+ {
+  "role": "assistant",
+  "content": "ဟုတ်ကဲ့၊ နားလိုက်လေ။ ဘာလုပ်ချင်လို့လဲ?"
+ },
+ {
+  "role": "user",
+  "content": "ဘာလုပ်ရင်ကောင်းမလဲ"
+ },
+ {
+  "role": "assistant",
+  "content": "အိပ်စက်တာပဲ၊ မင်းပျိုနေရမယ်နော်!"
+ },
+ {
+  "role": "user",
+  "content": "bar lote yin kg ma ll"
+ },
+ {
+  "role": "assistant",
+  "content": "နာကျင်တယ်ဟုတ်လား။ ဘာဖြစ်လို့လဲ?"
+ },
+ {
+  "role": "user",
+  "content": "br lote yin kg ma lal"
+ },
+ {
+  "role": "assistant",
+  "content": "မပြောနဲ့လေ၊ ငါ့ကို ပြောပါဦး။"
+ },
+ {
+  "role": "user",
+  "content": "bar lal ha"
+ },
+ {
+  "role": "assistant",
+  "content": "ဟယ်၊ ဒါကတော့ ရူးနေတာပဲနော်!"
+ },
+ {
+  "role": "user",
+  "content": "and?"
+ },
+ {
+  "role": "assistant",
+  "content": "အင်း၊ မင်းလုပ်တဲ့အတိုင်းပဲ။ ဘာမှမပြောင်းဘူးလေ।"
+ },
+ {
+  "role": "user",
+  "content": "remind me to drink water in 10 second"
+ },
+ {
+  "role": "assistant",
+  "content": "ဟုတ်ကဲ့၊ ငါ့ကို ပြောလိုက်ပြီနော်! မိုးရွာနေလို့ သေချာသောက်ပါစေနဲ့။"
+ },
+ {
+  "role": "user",
+  "content": "remind me to drink water in 10 sec"
+ },
+ {
+  "role": "assistant",
+  "content": "မေ့သွားရင် ငါ့ကိုပြန်ပြောလေ။ အလုပ်ကောင်းအောင် လုပ်ပါ၊ သေသပ်သလို သောက်ပါနော်!"
+ },
+ {
+  "role": "user",
+  "content": "br lal ha"
+ },
+ {
+  "role": "assistant",
+  "content": "ဘာလို့လဲ? ဘာမှမဟုတ်တာပဲလား။"
+ },
+ {
+  "role": "user",
+  "content": "br pyaw tar lal"
+ },
+ {
+  "role": "assistant",
+  "content": "မင်းပြောတဲ့အရာကို နားလည်ဖို့ကွာ၊ ပြန်ပြောပါဦး။"
+ },
+ {
+  "role": "user",
+  "content": "thi bu"
+ },
+ {
+  "role": "assistant",
+  "content": "ဘာလို့သီဘူးလဲ? ငါ့ကိုရှင်းပြပေးလေ!"
+ },
+ {
+  "role": "user",
+  "content": "ဘယ်နှစ်ရက်နေ့လဲ"
+ },
+ {
+  "role": "assistant",
+  "content": "ဒီမနဝ်ဍာၚ်ၜဳ၆၊၂၀၂၆။ နဲကဵုၜၠေတ်ၜိုန်ဒၟိုင် ၁၉:၄၉ ပါ।"
+ },
+ {
+  "role": "user",
+  "content": "လီး"
+ },
+ {
+  "role": "assistant",
+  "content": "အံၚးဂွါဏီ လိက်ၜဴၜှၞောဝ်ပါစေမလား၊ မင်း?"
+ },
+ {
+  "role": "user",
+  "content": "taw thar"
+ },
+ {
+  "role": "assistant",
+  "content": "ဟယ်! အဲဒၟာၚ်ကၠေတ်ၜိုန်ဒၟိုင်ညောင်ၜဳ။ နဂ္ဂါဍ္StoreExceptionနွံအရာၚီလေရော。"
+ },
+ {
+  "role": "user",
+  "content": "တောသား"
+ },
+ {
+  "role": "assistant",
+  "content": "မၞိဟ်ၜဴၜှၞောဝ်ကဵုၜဳၜဲ၊ မင်း။ လေ?"
+ },
+ {
+  "role": "user",
+  "content": "eng lo pyaw"
+ },
+ {
+  "role": "assistant",
+  "content": "ညောင်ဍ္ၚာၟံင်အရာၚီဂွါဏီလေရော၊ မင်း。"
+ }
+]
